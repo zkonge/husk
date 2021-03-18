@@ -1,0 +1,9 @@
+[package]
+name = "baozi"
+version = "0.1.0"
+authors = ["zkonge@outlook.com"]
+
+[dependencies]
+num = "^0.4"
+enum_primitive = "^0.1"
+rand = { version = "^0.8", features = ["getrandom"] }
