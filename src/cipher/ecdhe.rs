@@ -1,16 +1,17 @@
-use rand::{RngCore, rngs::OsRng};
 use std::io::Cursor;
+use rand::{RngCore, rngs::OsRng};
+
 
 use super::KeyExchange;
-use crypto::p256;
-use crypto::wrapping::Wrapping as W;
-use handshake::NamedCurve;
-use signature::DigitallySigned;
-use tls_item::TlsItem;
-use tls_result::TlsErrorKind::IllegalParameter;
-use tls_result::TlsResult;
-use tls_result;
-use util::{ReadExt, WriteExt};
+use crate::crypto::p256;
+use crate::crypto::wrapping::Wrapping as W;
+use crate::handshake::NamedCurve;
+use crate::signature::DigitallySigned;
+use crate::tls_item::TlsItem;
+use crate::tls_result::TlsErrorKind::IllegalParameter;
+use crate::tls_result::TlsResult;
+use crate::tls_result;
+use crate::util::{ReadExt, WriteExt};
 
 tls_vec!(EcData = u8(1, (1 << 8) - 1));
 
@@ -52,7 +53,7 @@ macro_rules! tls_enum_struct {
         }
 
         impl TlsItem for $enum_name {
-            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> ::tls_result::TlsResult<()> {
+            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> crate::tls_result::TlsResult<()> {
                 match *self {
                     $(
                         $enum_name::$name(ref body) => {
@@ -64,7 +65,7 @@ macro_rules! tls_enum_struct {
                 Ok(())
             }
 
-            fn tls_read<R: ReadExt>(reader: &mut R) -> ::tls_result::TlsResult<$enum_name> {
+            fn tls_read<R: ReadExt>(reader: &mut R) -> crate::tls_result::TlsResult<$enum_name> {
                 let num = try_read_num!($repr_ty, reader);
                 match num {
                     $(

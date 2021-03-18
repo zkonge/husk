@@ -6,11 +6,11 @@
 // openssl 1.0.2-aead branch seems to implement draft 01.
 
 use super::{Aead, Decryptor, Encryptor};
-use crypto::chacha20::ChaCha20;
-use crypto::poly1305;
-use tls_result::TlsErrorKind::BadRecordMac;
-use tls_result::TlsResult;
-use util::u64_le_array;
+use crate::crypto::chacha20::ChaCha20;
+use crate::crypto::poly1305;
+use crate::tls_result::TlsErrorKind::BadRecordMac;
+use crate::tls_result::TlsResult;
+use crate::util::u64_le_array;
 
 const KEY_LEN: usize = 256 / 8;
 const EXPLICIT_IV_LEN: usize = 0;

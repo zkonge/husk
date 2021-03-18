@@ -8,8 +8,8 @@
 //! -   `tls_struct` for TLS constructed type
 //! -   `tls_option` for `Option<T>`
 
-use tls_result::TlsResult;
-use util::{ReadExt, WriteExt};
+use crate::tls_result::TlsResult;
+use crate::util::{ReadExt, WriteExt};
 
 /// A trait for items that can be serialized at TLS stream.
 pub trait TlsItem {
@@ -27,12 +27,12 @@ pub trait TlsItem {
 macro_rules! tls_primitive {
     ($t:ident) => {
         impl TlsItem for $t {
-            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> ::tls_result::TlsResult<()> {
+            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> TlsResult<()> {
                 try_write_num!($t, writer, *self);
                 Ok(())
             }
 
-            fn tls_read<R: ReadExt>(reader: &mut R) -> ::tls_result::TlsResult<$t> {
+            fn tls_read<R: ReadExt>(reader: &mut R) -> TlsResult<$t> {
                 let u = try_read_num!($t, reader);
                 Ok(u)
             }
@@ -64,7 +64,7 @@ macro_rules! tls_struct {
         }
 
         impl TlsItem for $name {
-            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> ::tls_result::TlsResult<()> {
+            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> crate::tls_result::TlsResult<()> {
                 $(
                     self.$item.tls_write(writer)?;
                 )+
@@ -72,7 +72,7 @@ macro_rules! tls_struct {
                 Ok(())
             }
 
-            fn tls_read<R: ReadExt>(reader: &mut R) -> ::tls_result::TlsResult<$name> {
+            fn tls_read<R: ReadExt>(reader: &mut R) -> crate::tls_result::TlsResult<$name> {
                 $(
                     let $item: $t = TlsItem::tls_read(reader)?;
                 )+
@@ -119,17 +119,17 @@ macro_rules! tls_enum {
         }
 
         impl TlsItem for $name {
-            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> ::tls_result::TlsResult<()> {
+            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> crate::tls_result::TlsResult<()> {
                 try_write_num!($repr_ty, writer, *self);
                 Ok(())
             }
 
-            fn tls_read<R: ReadExt>(reader: &mut R) -> ::tls_result::TlsResult<$name> {
+            fn tls_read<R: ReadExt>(reader: &mut R) -> crate::tls_result::TlsResult<$name> {
                 let num = try_read_num!($repr_ty, reader) as u64;
-                let n: Option<$name> = ::num::traits::FromPrimitive::from_u64(num);
+                let n: Option<$name> = num::traits::FromPrimitive::from_u64(num);
                 match n {
                     Some(n) => Ok(n),
-                    None => tls_err!(::tls_result::TlsErrorKind::DecodeError,
+                    None => tls_err!(crate::tls_result::TlsErrorKind::DecodeError,
                                      "unexpected number: {}", num),
                 }
             }
@@ -235,7 +235,7 @@ macro_rules! tls_vec {
         }
 
         impl TlsItem for $name {
-            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> ::tls_result::TlsResult<()> {
+            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> crate::tls_result::TlsResult<()> {
                 let len = self.data_size();
 
                 let size_max: u64 = $size_max;
@@ -259,7 +259,7 @@ macro_rules! tls_vec {
                 Ok(())
             }
 
-            fn tls_read<R: ReadExt>(reader: &mut R) -> ::tls_result::TlsResult<$name> {
+            fn tls_read<R: ReadExt>(reader: &mut R) -> crate::tls_result::TlsResult<$name> {
                 let size_max: u64 = $size_max;
 
                 let self_size = if size_max < 1 << 8 {
@@ -283,7 +283,7 @@ macro_rules! tls_vec {
                 }
                 if items_size != self_size {
                     return tls_err!(
-                        ::tls_result::TlsErrorKind::DecodeError,
+                        crate::tls_result::TlsErrorKind::DecodeError,
                         "wrong size: {} expected, {} found",
                         self_size,
                         items_size
@@ -328,7 +328,7 @@ macro_rules! tls_vec {
 macro_rules! tls_option {
     ($t:ty) => {
         impl TlsItem for Option<$t> {
-            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> ::tls_result::TlsResult<()> {
+            fn tls_write<W: WriteExt>(&self, writer: &mut W) -> TlsResult<()> {
                 match *self {
                     Some(ref data) => {
                         data.tls_write(writer)?;
@@ -338,7 +338,7 @@ macro_rules! tls_option {
                 Ok(())
             }
 
-            fn tls_read<R: ReadExt>(reader: &mut R) -> ::tls_result::TlsResult<Option<$t>> {
+            fn tls_read<R: ReadExt>(reader: &mut R) -> crate::tls_result::TlsResult<Option<$t>> {
                 let mut rest = vec![];
                 let len = reader.read_to_end(&mut rest)?;
                 if len == 0 {

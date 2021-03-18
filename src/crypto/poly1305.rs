@@ -1,6 +1,9 @@
 // http://cr.yp.to/mac/poly1305-20050329.pdf
 
-use crypto::wrapping::*;
+// use core::num::Wrapping;
+use crate::crypto::wrapping::*;
+// use std::num::Wrapping;
+// use crypto::wrapping::*;
 
 macro_rules! choose_impl {
     ($s: ident, $t:ty, $($a:expr)+) => (

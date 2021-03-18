@@ -2,10 +2,10 @@ use rand::rngs::OsRng;
 
 use self::chacha20_poly1305::ChaCha20Poly1305;
 use self::ecdhe::EllipticDiffieHellman;
-use tls_item::TlsItem;
-use tls_result::TlsErrorKind::UnexpectedMessage;
-use tls_result::TlsResult;
-use util::{ReadExt, WriteExt};
+use crate::tls_item::TlsItem;
+use crate::tls_result::TlsErrorKind::UnexpectedMessage;
+use crate::tls_result::TlsResult;
+use crate::util::{ReadExt, WriteExt};
 
 pub mod chacha20_poly1305;
 pub mod ecdhe;

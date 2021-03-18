@@ -1,10 +1,10 @@
-use cipher::CipherSuite;
-use signature::SignatureAndHashAlgorithmVec;
-use tls::TLS_VERSION;
-use tls_item::{DummyItem, ObscureData, TlsItem};
-use tls_result::TlsErrorKind::{DecodeError, InternalError, UnexpectedMessage};
-use tls_result::TlsResult;
-use util::{ReadExt, WriteExt};
+use crate::cipher::CipherSuite;
+use crate::signature::SignatureAndHashAlgorithmVec;
+use crate::tls::TLS_VERSION;
+use crate::tls_item::{DummyItem, ObscureData, TlsItem};
+use crate::tls_result::TlsErrorKind::{DecodeError, InternalError, UnexpectedMessage};
+use crate::tls_result::TlsResult;
+use crate::util::{ReadExt, WriteExt};
 
 // This is actually `struct { gmt_unix_time: u32, random_bytes: [u8, ..28] }`
 // cf: http://tools.ietf.org/html/draft-mathewson-no-gmtunixtime-00
@@ -427,9 +427,9 @@ impl Handshake {
 
 #[cfg(test)]
 mod test {
-    use cipher::CipherSuite;
     use std::io::Cursor;
-    use tls_item::TlsItem;
+    use crate::cipher::CipherSuite;
+    use crate::tls_item::TlsItem;
 
     use super::{
         CipherSuiteVec, ClientHello, CompressionMethod, CompressionMethodVec, Handshake,

@@ -1,14 +1,14 @@
 use num::traits::FromPrimitive;
 use std::io::prelude::*;
 
-use alert::Alert;
-use cipher::{Decryptor, Encryptor};
-use handshake::{Handshake, HandshakeBuffer};
-use tls_item::TlsItem;
-use tls_result::TlsErrorKind::{AlertReceived, BadRecordMac, RecordOverflow, UnexpectedMessage};
-use tls_result::TlsResult;
-use util::u64_be_array;
-use util::{ReadExt, WriteExt};
+use crate::alert::Alert;
+use crate::cipher::{Decryptor, Encryptor};
+use crate::handshake::{Handshake, HandshakeBuffer};
+use crate::tls_item::TlsItem;
+use crate::tls_result::TlsErrorKind::{AlertReceived, BadRecordMac, RecordOverflow, UnexpectedMessage};
+use crate::tls_result::TlsResult;
+use crate::util::u64_be_array;
+use crate::util::{ReadExt, WriteExt};
 
 use self::ContentType::{AlertTy, ApplicationDataTy, ChangeCipherSpecTy, HandshakeTy};
 use self::Message::{
@@ -389,7 +389,8 @@ impl<R: ReadExt> TlsReader<R> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use cipher::Encryptor;
+    use crate::cipher::Encryptor;
+    use crate::tls_result;
     use std::io::Cursor;
 
     macro_rules! assert_record {
@@ -408,7 +409,7 @@ mod test {
     macro_rules! assert_err {
         ($e:expr, $kind:ident) => {
             if let Err(e) = $e {
-                assert_eq!(e.kind, ::tls_result::TlsErrorKind::$kind);
+                assert_eq!(e.kind, tls_result::TlsErrorKind::$kind);
             } else {
                 panic!("expected `Err`, found `Ok(..)`");
             }

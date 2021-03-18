@@ -1,7 +1,7 @@
 // 7.4.1.4.1 Signature algorithm
 
-use tls_item::TlsItem;
-use util::{ReadExt, WriteExt};
+use crate::tls_item::TlsItem;
+use crate::util::{ReadExt, WriteExt};
 
 tls_enum!(u8, enum HashAlgorithm {
    none(0), md5(1), sha1(2), sha224(3), sha256(4), sha384(5),

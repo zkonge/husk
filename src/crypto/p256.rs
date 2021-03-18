@@ -3,8 +3,8 @@
 // http://point-at-infinity.org/ecc/nisttv
 
 use self::int256::{Int256, ONE, ZERO};
-use crypto::wrapping::Wrapping as W;
-use crypto::wrapping::*;
+use crate::crypto::wrapping::Wrapping as W;
+use crate::crypto::wrapping::*;
 
 // Point on Y^2 = X^3 - 3 * X + B mod P256 where B is some obscure big number
 // (x, y, z): (X, Y) = (x/z^2, y/z^3) is point of Y^2 = X^3 - 3 * X + c
@@ -285,8 +285,8 @@ impl NPoint256 {
 }
 
 pub mod int256 {
-    use crypto::wrapping::Wrapping as W;
-    use crypto::wrapping::*;
+    use crate::crypto::wrapping::Wrapping as W;
+    use crate::crypto::wrapping::*;
 
     const LIMBS: usize = 8;
 
@@ -638,7 +638,7 @@ pub mod int256 {
     #[cfg(test)]
     mod test {
         use super::{Int256, ONE, P256, ZERO};
-        use crypto::wrapping::Wrapping as W;
+        use crate::crypto::wrapping::Wrapping as W;
 
         impl PartialEq for Int256 {
             fn eq(&self, b: &Int256) -> bool {

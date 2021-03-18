@@ -1,6 +1,6 @@
-use tls_item::TlsItem;
-use tls_result::{TlsError, TlsErrorKind, TlsResult};
-use util::{ReadExt, WriteExt};
+use crate::tls_item::TlsItem;
+use crate::tls_result::{TlsError, TlsErrorKind, TlsResult};
+use crate::util::{ReadExt, WriteExt};
 
 // we treat every alert as fatal.
 tls_enum!(u8, enum AlertLevel {
@@ -74,7 +74,7 @@ impl Alert {
     pub fn new(level: AlertLevel, desc: AlertDescription) -> TlsResult<Alert> {
         // TODO filter out some rfc-invalid alerts
         Ok(Alert {
-            level: level,
+            level,
             description: desc,
         })
     }

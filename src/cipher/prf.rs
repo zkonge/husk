@@ -1,7 +1,7 @@
 // In AEAD setting, PRF is only used for key calculation.
 // SHA-256 only for now.
 
-use crypto::sha2::sha256;
+use crate::crypto::sha2::sha256;
 use std::mem;
 
 // key is SECRET, but the length is publicly known.

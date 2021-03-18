@@ -2,11 +2,11 @@ use std::io::prelude::*;
 use std::io::Cursor;
 use std::iter::repeat;
 
-use cipher::{Decryptor, Encryptor};
-use tls::Message::{ApplicationDataMessage, ChangeCipherSpecMessage};
-use tls::RECORD_MAX_LEN;
-use tls::{TlsReader, TlsWriter};
-use tls_result::TlsResult;
+use crate::cipher::{Decryptor, Encryptor};
+use crate::tls::Message::{ApplicationDataMessage, ChangeCipherSpecMessage};
+use crate::tls::RECORD_MAX_LEN;
+use crate::tls::{TlsReader, TlsWriter};
+use crate::tls_result::TlsResult;
 
 // ROT26 is a [Caesar cipher][1] with highly optimized diffusion table.
 // [1]: http://www.anagram.com/jcrap/Volume_3/caesar.pdf

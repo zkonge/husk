@@ -1,7 +1,7 @@
 // http://cr.yp.to/chacha/chacha-20080128.pdf
 // http://cr.yp.to/chacha.html
 
-use crypto::wrapping::*;
+use crate::crypto::wrapping::*;
 
 // convert $e.slice($i, $i + 4) into u32
 macro_rules! to_le_u32 {

@@ -4,16 +4,16 @@ use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;
 
-use alert;
-use cipher;
-use cipher::prf::Prf;
-use crypto::sha2::sha256;
-use handshake::{self, Handshake};
-use tls::{TlsReader, TlsWriter, TLS_VERSION};
-use tls_item::{DummyItem, TlsItem};
-use tls_result::TlsErrorKind::{DecryptError, IllegalParameter, UnexpectedMessage};
-use tls_result::{TlsError, TlsErrorKind, TlsResult};
-use util::{crypto_compare, SurugaError};
+use crate::alert;
+use crate::cipher;
+use crate::cipher::prf::Prf;
+use crate::crypto::sha2::sha256;
+use crate::handshake::{self, Handshake};
+use crate::tls::{TlsReader, TlsWriter, TLS_VERSION};
+use crate::tls_item::{DummyItem, TlsItem};
+use crate::tls_result::TlsErrorKind::{DecryptError, IllegalParameter, UnexpectedMessage};
+use crate::tls_result::{TlsError, TlsErrorKind, TlsResult};
+use crate::util::{crypto_compare, SurugaError};
 
 // handshake is done during construction.
 pub struct TlsClient<R: Read, W: Write> {
