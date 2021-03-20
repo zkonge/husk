@@ -140,16 +140,16 @@ impl Aead for ChaCha20Poly1305 {
 
 #[cfg(test)]
 mod test {
-    use super::ChaCha20Poly1305;
     use super::Aead;
+    use super::ChaCha20Poly1305;
 
     #[test]
     fn test_chacha20_poly1305() {
-        let key = vec![0u8; 32];
-        let plain = vec![0u8; 32];
-        let nonce = vec![0u8; 12];
+        let key = vec![1u8; 32];
+        let plain = vec![1u8; 32];
+        let nonce = vec![1u8; 12];
         let mut enc = ChaCha20Poly1305 {}.new_encryptor(key);
-        let r = enc.encrypt(&nonce, &plain, &[0u8; 0]);
-        assert_eq!(r.as_slice(),b"\x9f\x07\xe7\xbeUQ8z\x98\xba\x97|s-\x08\r\xcb\x0f)\xa0H\xe3ei\x12\xc6S>2\xeez\xed\x95\xf8+\xfa\xe8\xf5\"!\x7f\x8b}\xb3\x9b@\xad\x06");
+        let r = enc.encrypt(&nonce, &plain, &[1u8; 32]);
+        assert_eq!(r.as_slice(),b"\xf0/\xea.\xbd\xd0\xb1\xee\xc6\xc9'P\x9fL\xbb$\x10}\xc0b\xfa\x0b\xa7\\\xd3\x10Q\x98\xda\x00\xc9\x98%jK\x13\rH\xba\xd0&\x0cp|\xbbE\xbe\xf4");
     }
 }

@@ -118,7 +118,7 @@ impl<W: Write> TlsWriter<W> {
                 u96_seq_num[4..12].copy_from_slice(&seq_num);
 
                 let mut ad = Vec::new();
-                ad.extend(&u96_seq_num);
+                ad.extend(&seq_num);
                 ad.push(record.content_type as u8);
                 ad.push(record.ver_major);
                 ad.push(record.ver_minor);
@@ -126,9 +126,12 @@ impl<W: Write> TlsWriter<W> {
                 ad.push((frag_len >> 8) as u8);
                 ad.push(frag_len as u8);
 
+                println!("seq:{:02X?}",u96_seq_num);
+                println!("iv :{:02X?}",self.iv);
                 if let Some(ref iv) = self.iv {
                     u96_seq_num.iter_mut().zip(iv).for_each(|x| *x.0 ^= x.1); //TODO performance improve
                 }
+                println!("res:{:02X?}",u96_seq_num);
 
                 let encrypted_fragment = encryptor.encrypt(&u96_seq_num, &record.fragment, &ad);
                 encrypted_fragment
@@ -281,7 +284,7 @@ impl<R: ReadExt> TlsReader<R> {
                 // let seq_num = u32_be_array(self.read_count);
 
                 let mut ad = Vec::new();
-                ad.extend(&u96_seq_num);
+                ad.extend(&seq_num);
                 ad.push(content_type as u8); // TLSCompressed.type
                 ad.push(major);
                 ad.push(minor);
