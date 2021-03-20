@@ -21,13 +21,21 @@ fn compute_mac(poly_key: &[u8], encrypted: &[u8], ad: &[u8]) -> [u8; MAC_LEN] {
 
     // follow draft-agl-tls-chacha20poly1305-04: data first, length later
     // note that in draft-agl-tls-chacha20poly1305-01 length is first
-    fn push_all_with_len(vec: &mut Vec<u8>, data: &[u8]) {
-        vec.extend(data);
-        vec.extend(&u64_le_array(data.len() as u64));
-    }
 
-    push_all_with_len(&mut msg, ad);
-    push_all_with_len(&mut msg, encrypted);
+    // Old chacha20poly1305
+    // fn push_all_with_len(vec: &mut Vec<u8>, data: &[u8]) {
+    //     vec.extend(data);
+    //     vec.extend(&u64_le_array(data.len() as u64));
+    // }
+
+    // push_all_with_len(&mut msg, ad);
+    // push_all_with_len(&mut msg, encrypted);
+
+    // Chacha20Poly1305-ieft
+    msg.extend(ad);
+    msg.extend(encrypted);
+    msg.extend(&u64_le_array(ad.len() as u64));
+    msg.extend(&u64_le_array(encrypted.len() as u64));
 
     let mut r = [0u8; MAC_LEN];
     for i in 0..MAC_LEN {
@@ -119,13 +127,29 @@ impl Aead for ChaCha20Poly1305 {
 
     #[inline(always)]
     fn new_encryptor(&self, key: Vec<u8>) -> Box<dyn Encryptor + Send + 'static> {
-        let encryptor = ChaCha20Poly1305Encryptor { key: key };
+        let encryptor = ChaCha20Poly1305Encryptor { key };
         Box::new(encryptor) as Box<dyn Encryptor + Send>
     }
 
     #[inline(always)]
     fn new_decryptor(&self, key: Vec<u8>) -> Box<dyn Decryptor + Send + 'static> {
-        let decryptor = ChaCha20Poly1305Decryptor { key: key };
+        let decryptor = ChaCha20Poly1305Decryptor { key };
         Box::new(decryptor) as Box<dyn Decryptor + Send>
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::ChaCha20Poly1305;
+    use super::Aead;
+
+    #[test]
+    fn test_chacha20_poly1305() {
+        let key = vec![0u8; 32];
+        let plain = vec![0u8; 32];
+        let nonce = vec![0u8; 12];
+        let mut enc = ChaCha20Poly1305 {}.new_encryptor(key);
+        let r = enc.encrypt(&nonce, &plain, &[0u8; 0]);
+        assert_eq!(r.as_slice(),b"\x9f\x07\xe7\xbeUQ8z\x98\xba\x97|s-\x08\r\xcb\x0f)\xa0H\xe3ei\x12\xc6S>2\xeez\xed\x95\xf8+\xfa\xe8\xf5\"!\x7f\x8b}\xb3\x9b@\xad\x06");
     }
 }

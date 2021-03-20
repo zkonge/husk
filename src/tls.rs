@@ -1,14 +1,15 @@
 use num::traits::FromPrimitive;
 use std::io::prelude::*;
 
-use crate::alert::Alert;
 use crate::cipher::{Decryptor, Encryptor};
 use crate::handshake::{Handshake, HandshakeBuffer};
 use crate::tls_item::TlsItem;
-use crate::tls_result::TlsErrorKind::{AlertReceived, BadRecordMac, RecordOverflow, UnexpectedMessage};
+use crate::tls_result::TlsErrorKind::{
+    AlertReceived, BadRecordMac, RecordOverflow, UnexpectedMessage,
+};
 use crate::tls_result::TlsResult;
-use crate::util::u64_be_array;
 use crate::util::{ReadExt, WriteExt};
+use crate::{alert::Alert, util::u64_be_array};
 
 use self::ContentType::{AlertTy, ApplicationDataTy, ChangeCipherSpecTy, HandshakeTy};
 use self::Message::{
@@ -58,10 +59,10 @@ impl Record {
         }
 
         Record {
-            content_type: content_type,
-            ver_major: ver_major,
-            ver_minor: ver_minor,
-            fragment: fragment,
+            content_type,
+            ver_major,
+            ver_minor,
+            fragment,
         }
     }
 }
@@ -73,6 +74,7 @@ pub struct TlsWriter<W: Write> {
     // if encryptor is None, handshake is not done yet.
     encryptor: Option<Box<dyn Encryptor + Send + 'static>>,
     write_count: u64,
+    iv: Option<Vec<u8>>,
 }
 
 impl<W: Write> TlsWriter<W> {
@@ -80,9 +82,10 @@ impl<W: Write> TlsWriter<W> {
     /// Invoke `set_encryptor` to set encryptor.
     pub fn new(writer: W) -> TlsWriter<W> {
         TlsWriter {
-            writer: writer,
+            writer,
             encryptor: None,
             write_count: 0,
+            iv: None,
         }
     }
 
@@ -99,14 +102,23 @@ impl<W: Write> TlsWriter<W> {
         self.write_count = 0;
     }
 
+    /// Set iv for aead.
+    /// This must be called only once.
+    pub fn set_iv(&mut self, iv: Vec<u8>) {
+        assert!(self.iv.is_none());
+        self.iv = Some(iv);
+    }
+
     pub fn write_record(&mut self, record: Record) -> TlsResult<()> {
         let encrypted_fragment = match self.encryptor {
             None => record.fragment,
             Some(ref mut encryptor) => {
                 let seq_num = u64_be_array(self.write_count);
+                let mut u96_seq_num = [0u8; 12];
+                u96_seq_num[4..12].copy_from_slice(&seq_num);
 
                 let mut ad = Vec::new();
-                ad.extend(&seq_num);
+                ad.extend(&u96_seq_num);
                 ad.push(record.content_type as u8);
                 ad.push(record.ver_major);
                 ad.push(record.ver_minor);
@@ -114,7 +126,11 @@ impl<W: Write> TlsWriter<W> {
                 ad.push((frag_len >> 8) as u8);
                 ad.push(frag_len as u8);
 
-                let encrypted_fragment = encryptor.encrypt(&seq_num, &record.fragment, &ad);
+                if let Some(ref iv) = self.iv {
+                    u96_seq_num.iter_mut().zip(iv).for_each(|x| *x.0 ^= x.1); //TODO performance improve
+                }
+
+                let encrypted_fragment = encryptor.encrypt(&u96_seq_num, &record.fragment, &ad);
                 encrypted_fragment
             }
         };
@@ -185,6 +201,7 @@ pub struct TlsReader<R: ReadExt> {
     decryptor: Option<Box<dyn Decryptor + Send + 'static>>,
     read_count: u64,
     handshake_buffer: HandshakeBuffer,
+    iv: Option<Vec<u8>>,
 }
 
 /// Reads `Record` or `Message` from a readable object.
@@ -192,10 +209,11 @@ pub struct TlsReader<R: ReadExt> {
 impl<R: ReadExt> TlsReader<R> {
     pub fn new(reader: R) -> TlsReader<R> {
         TlsReader {
-            reader: reader,
+            reader,
             decryptor: None,
             read_count: 0,
             handshake_buffer: HandshakeBuffer::new(),
+            iv: None,
         }
     }
 
@@ -210,6 +228,13 @@ impl<R: ReadExt> TlsReader<R> {
         assert!(self.decryptor.is_none());
         self.decryptor = Some(decryptor);
         self.read_count = 0;
+    }
+
+    /// Set iv for aead.
+    /// This must be called only once.
+    pub fn set_iv(&mut self, iv: Vec<u8>) {
+        assert!(self.iv.is_none());
+        self.iv = Some(iv);
     }
 
     /// Read a record from readable stream.
@@ -251,9 +276,12 @@ impl<R: ReadExt> TlsReader<R> {
             }
             Some(ref mut decryptor) => {
                 let seq_num = u64_be_array(self.read_count);
+                let mut u96_seq_num = [0u8; 12];
+                u96_seq_num[4..12].copy_from_slice(&seq_num);
+                // let seq_num = u32_be_array(self.read_count);
 
                 let mut ad = Vec::new();
-                ad.extend(&seq_num);
+                ad.extend(&u96_seq_num);
                 ad.push(content_type as u8); // TLSCompressed.type
                 ad.push(major);
                 ad.push(minor);
@@ -267,8 +295,12 @@ impl<R: ReadExt> TlsReader<R> {
                 ad.push((frag_len >> 8) as u8);
                 ad.push(frag_len as u8);
 
+                if let Some(ref iv) = self.iv {
+                    u96_seq_num.iter_mut().zip(iv).for_each(|x| *x.0 ^= x.1); //TODO performance improve
+                }
+
                 // TODO: "seq_num as nonce" is chacha20poly1305-specific
-                let data = decryptor.decrypt(&seq_num, &fragment, &ad)?;
+                let data = decryptor.decrypt(&u96_seq_num, &fragment, &ad)?;
                 if data.len() > RECORD_MAX_LEN {
                     // decryption routine went wrong.
                     panic!("decrypted record too long: {}", data.len());
@@ -365,7 +397,7 @@ impl<R: ReadExt> TlsReader<R> {
                 // TODO: handle other cases
                 AlertMessage(..) => unimplemented!(),
                 ChangeCipherSpecMessage => unimplemented!(), // this should not come here
-                HandshakeMessage(..) => unimplemented!(),        // TODO: re-handshake
+                HandshakeMessage(..) => unimplemented!(),    // TODO: re-handshake
             }
         }
     }
@@ -381,6 +413,10 @@ impl<R: ReadExt> TlsReader<R> {
     pub fn read_change_cipher_spec(&mut self) -> TlsResult<()> {
         match self.read_message()? {
             ChangeCipherSpecMessage => Ok(()),
+            AlertMessage(e) => {
+                eprintln!("Alert: {:?}", e.description);
+                tls_err!(UnexpectedMessage, "expected ChangeCipherSpec, get alert")
+            }
             _ => tls_err!(UnexpectedMessage, "expected ChangeCipherSpec"),
         }
     }

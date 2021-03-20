@@ -374,8 +374,8 @@ impl Handshake {
                 let (major, minor) = TLS_VERSION;
 
                 ProtocolVersion {
-                    major: major,
-                    minor: minor,
+                    major,
+                    minor,
                 }
             };
 

@@ -108,7 +108,8 @@ macro_rules! cipher_suite {
 cipher_suite!(
     // http://tools.ietf.org/html/draft-agl-tls-chacha20poly1305-04
     TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 =
-    EllipticDiffieHellman, ChaCha20Poly1305, MAC_SHA256, 0xcc, 0x13;
+    EllipticDiffieHellman, ChaCha20Poly1305, MAC_SHA256, 0xcc, 0xa8;
+    // EllipticDiffieHellman, ChaCha20Poly1305, MAC_SHA256, 0xcc, 0x13;
     // TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 =
     // EllipticDiffieHellman ChaCha20Poly1305 MAC_SHA256 0xcc 0x14;
 );

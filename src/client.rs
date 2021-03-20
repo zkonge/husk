@@ -160,9 +160,13 @@ impl<R: Read, W: Write> TlsClient<R, W> {
             // this will be set after receiving ChangeCipherSpec.
             let read_key = prf.get_bytes(enc_key_length);
 
-            // chacha20-poly1305 does not use iv.
+            let write_iv = prf.get_bytes(12);
+            let read_iv = prf.get_bytes(12);
 
-            read_key
+            self.writer.set_iv(write_iv);
+            self.reader.set_iv(read_iv);
+
+            read_key //TODO: modify chacha20 nonce iv
         };
 
         // FIXME we should get "raw" packet data and hash them incrementally

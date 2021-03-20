@@ -48,6 +48,14 @@ pub fn u64_le_array(x: u64) -> [u8; 8] {
     unsafe { mem::transmute(x.to_le()) }
 }
 
+pub fn u32_be_array(x: u32) -> [u8; 4] {
+    unsafe { mem::transmute(x.to_be()) }
+}
+
+pub fn u32_le_array(x: u32) -> [u8; 4] {
+    unsafe { mem::transmute(x.to_le()) }
+}
+
 // native endians.
 macro_rules! read_write_prim {
     ($read_name:ident, $write_name:ident, $t:ty, $len:expr) => {
