@@ -1,441 +1,230 @@
 // http://cr.yp.to/mac/poly1305-20050329.pdf
 
-// use core::num::Wrapping;
-use crate::crypto::wrapping::*;
-// use std::num::Wrapping;
-// use crypto::wrapping::*;
+use std::convert::TryInto;
 
-macro_rules! choose_impl {
-    ($s: ident, $t:ty, $($a:expr)+) => (
-        impl $s {
-            fn choose(flag: $t, a: &$s, b: &$s) -> $s {
-                $s {
-                    v: [
-                        $(
-                            a.v[$a] ^ (flag * (a.v[$a] ^ b.v[$a])),
-                        )+
-                    ]
-                }
-            }
-        }
-    )
+use byteorder::{ByteOrder, LittleEndian};
+
+#[derive(Clone, Default)]
+struct Poly1305 {
+    r: [u32; 5],
+    h: [u32; 5],
+    pad: [u32; 4],
 }
 
-// radix-2^26 (26 == 130/5)
-// value = v[0] + 2^26 v[1] + 2^52 v[2] + 2^78 v[3] + 2^104 v[4]
-// lazy normalization: v[i] <= 2^32 - 1
-// http://cr.yp.to/highspeed/neoncrypto-20120320.pdf
-pub struct Int1305 {
-    v: [u32; 5],
+impl Poly1305 {
+    pub fn new(r: &[u8; 16], s: &[u8; 16]) -> Self {
+        let mut poly = Self::default();
+        // r &= 0xffffffc0ffffffc0ffffffc0fffffff
+        poly.r[0] = (u32::from_le_bytes(r[..4].try_into().unwrap())) & 0x3ff_ffff;
+        poly.r[1] = (u32::from_le_bytes(r[3..7].try_into().unwrap()) >> 2) & 0x3ff_ff03;
+        poly.r[2] = (u32::from_le_bytes(r[6..10].try_into().unwrap()) >> 4) & 0x3ff_c0ff;
+        poly.r[3] = (u32::from_le_bytes(r[9..13].try_into().unwrap()) >> 6) & 0x3f0_3fff;
+        poly.r[4] = (u32::from_le_bytes(r[12..16].try_into().unwrap()) >> 8) & 0x00f_ffff;
+
+        LittleEndian::read_u32_into(s, &mut poly.pad);
+
+        poly
+    }
+    pub fn compute_block(&mut self, block: &[u8; 16], partial: bool) {
+        let hibit = if partial { 0 } else { 1 << 24 };
+
+        let r0 = self.r[0];
+        let r1 = self.r[1];
+        let r2 = self.r[2];
+        let r3 = self.r[3];
+        let r4 = self.r[4];
+
+        let s1 = r1 * 5;
+        let s2 = r2 * 5;
+        let s3 = r3 * 5;
+        let s4 = r4 * 5;
+
+        let mut h0 = self.h[0];
+        let mut h1 = self.h[1];
+        let mut h2 = self.h[2];
+        let mut h3 = self.h[3];
+        let mut h4 = self.h[4];
+
+        // h += m
+        h0 += (u32::from_le_bytes(block[0..4].try_into().unwrap())) & 0x3ff_ffff;
+        h1 += (u32::from_le_bytes(block[3..7].try_into().unwrap()) >> 2) & 0x3ff_ffff;
+        h2 += (u32::from_le_bytes(block[6..10].try_into().unwrap()) >> 4) & 0x3ff_ffff;
+        h3 += (u32::from_le_bytes(block[9..13].try_into().unwrap()) >> 6) & 0x3ff_ffff;
+        h4 += (u32::from_le_bytes(block[12..16].try_into().unwrap()) >> 8) | hibit;
+
+        // h *= r
+        let d0 = (u64::from(h0) * u64::from(r0))
+            + (u64::from(h1) * u64::from(s4))
+            + (u64::from(h2) * u64::from(s3))
+            + (u64::from(h3) * u64::from(s2))
+            + (u64::from(h4) * u64::from(s1));
+
+        let mut d1 = (u64::from(h0) * u64::from(r1))
+            + (u64::from(h1) * u64::from(r0))
+            + (u64::from(h2) * u64::from(s4))
+            + (u64::from(h3) * u64::from(s3))
+            + (u64::from(h4) * u64::from(s2));
+
+        let mut d2 = (u64::from(h0) * u64::from(r2))
+            + (u64::from(h1) * u64::from(r1))
+            + (u64::from(h2) * u64::from(r0))
+            + (u64::from(h3) * u64::from(s4))
+            + (u64::from(h4) * u64::from(s3));
+
+        let mut d3 = (u64::from(h0) * u64::from(r3))
+            + (u64::from(h1) * u64::from(r2))
+            + (u64::from(h2) * u64::from(r1))
+            + (u64::from(h3) * u64::from(r0))
+            + (u64::from(h4) * u64::from(s4));
+
+        let mut d4 = (u64::from(h0) * u64::from(r4))
+            + (u64::from(h1) * u64::from(r3))
+            + (u64::from(h2) * u64::from(r2))
+            + (u64::from(h3) * u64::from(r1))
+            + (u64::from(h4) * u64::from(r0));
+
+        // (partial) h %= p
+        let mut c: u32;
+        c = (d0 >> 26) as u32;
+        h0 = d0 as u32 & 0x3ff_ffff;
+        d1 += u64::from(c);
+
+        c = (d1 >> 26) as u32;
+        h1 = d1 as u32 & 0x3ff_ffff;
+        d2 += u64::from(c);
+
+        c = (d2 >> 26) as u32;
+        h2 = d2 as u32 & 0x3ff_ffff;
+        d3 += u64::from(c);
+
+        c = (d3 >> 26) as u32;
+        h3 = d3 as u32 & 0x3ff_ffff;
+        d4 += u64::from(c);
+
+        c = (d4 >> 26) as u32;
+        h4 = d4 as u32 & 0x3ff_ffff;
+        h0 += c * 5;
+
+        c = h0 >> 26;
+        h0 &= 0x3ff_ffff;
+        h1 += c;
+
+        self.h[0] = h0;
+        self.h[1] = h1;
+        self.h[2] = h2;
+        self.h[3] = h3;
+        self.h[4] = h4;
+    }
+
+    /// Finalize output producing a [`Tag`]
+    pub fn finalize(&mut self, ret: &mut [u8; 16]) {
+        // fully carry h
+        let mut h0 = self.h[0];
+        let mut h1 = self.h[1];
+        let mut h2 = self.h[2];
+        let mut h3 = self.h[3];
+        let mut h4 = self.h[4];
+
+        let mut c: u32;
+        c = h1 >> 26;
+        h1 &= 0x3ff_ffff;
+        h2 += c;
+
+        c = h2 >> 26;
+        h2 &= 0x3ff_ffff;
+        h3 += c;
+
+        c = h3 >> 26;
+        h3 &= 0x3ff_ffff;
+        h4 += c;
+
+        c = h4 >> 26;
+        h4 &= 0x3ff_ffff;
+        h0 += c * 5;
+
+        c = h0 >> 26;
+        h0 &= 0x3ff_ffff;
+        h1 += c;
+
+        // compute h + -p
+        let mut g0 = h0.wrapping_add(5);
+        c = g0 >> 26;
+        g0 &= 0x3ff_ffff;
+
+        let mut g1 = h1.wrapping_add(c);
+        c = g1 >> 26;
+        g1 &= 0x3ff_ffff;
+
+        let mut g2 = h2.wrapping_add(c);
+        c = g2 >> 26;
+        g2 &= 0x3ff_ffff;
+
+        let mut g3 = h3.wrapping_add(c);
+        c = g3 >> 26;
+        g3 &= 0x3ff_ffff;
+
+        let mut g4 = h4.wrapping_add(c).wrapping_sub(1 << 26);
+
+        // select h if h < p, or h + -p if h >= p
+        let mut mask = (g4 >> (32 - 1)).wrapping_sub(1);
+        g0 &= mask;
+        g1 &= mask;
+        g2 &= mask;
+        g3 &= mask;
+        g4 &= mask;
+        mask = !mask;
+        h0 = (h0 & mask) | g0;
+        h1 = (h1 & mask) | g1;
+        h2 = (h2 & mask) | g2;
+        h3 = (h3 & mask) | g3;
+        h4 = (h4 & mask) | g4;
+
+        // h = h % (2^128)
+        h0 |= h1 << 26;
+        h1 = (h1 >> 6) | (h2 << 20);
+        h2 = (h2 >> 12) | (h3 << 14);
+        h3 = (h3 >> 18) | (h4 << 8);
+
+        // h = mac = (h + pad) % (2^128)
+        let mut f: u64;
+        f = u64::from(h0) + u64::from(self.pad[0]);
+        h0 = f as u32;
+
+        f = u64::from(h1) + u64::from(self.pad[1]) + (f >> 32);
+        h1 = f as u32;
+
+        f = u64::from(h2) + u64::from(self.pad[2]) + (f >> 32);
+        h2 = f as u32;
+
+        f = u64::from(h3) + u64::from(self.pad[3]) + (f >> 32);
+        h3 = f as u32;
+
+        ret[0..4].copy_from_slice(&h0.to_le_bytes());
+        ret[4..8].copy_from_slice(&h1.to_le_bytes());
+        ret[8..12].copy_from_slice(&h2.to_le_bytes());
+        ret[12..16].copy_from_slice(&h3.to_le_bytes());
+    }
 }
 
-pub const ZERO: Int1305 = Int1305 { v: [0; 5] };
-
-choose_impl! {Int1305, u32, 0 1 2 3 4}
-
-impl Int1305 {
-    // no reduction.
-    fn add(&self, b: &Int1305) -> Int1305 {
-        macro_rules! add_digit {
-            ($a:expr, $b:expr, $c:expr, $($i:expr)+) => ({
-                $(
-                    $c[$i] = $a[$i] + $b[$i];
-                )+
-            })
-        }
-
-        let mut ret = [0; 5];
-
-        add_digit!(self.v, b.v, ret, 0 1 2 3 4);
-
-        Int1305 { v: ret }
-    }
-
-    fn mult(&self, b: &Int1305) -> Int1305 {
-        let b5 = [b.v[0] * 5, b.v[1] * 5, b.v[2] * 5, b.v[3] * 5, b.v[4] * 5];
-
-        macro_rules! m {
-            ($i:expr, $j:expr) => {
-                (self.v[$i] as u64) * (b.v[$j] as u64)
-            };
-        }
-        macro_rules! m5 {
-            ($i:expr, $j:expr) => {
-                (self.v[$i] as u64) * (b5[$j] as u64)
-            };
-        }
-
-        let mut v: [u64; 5] = [
-            m!(0, 0) + m5!(1, 4) + m5!(2, 3) + m5!(3, 2) + m5!(4, 1),
-            m!(0, 1) + m!(1, 0) + m5!(2, 4) + m5!(3, 3) + m5!(4, 2),
-            m!(0, 2) + m!(1, 1) + m!(2, 0) + m5!(3, 4) + m5!(4, 3),
-            m!(0, 3) + m!(1, 2) + m!(2, 1) + m!(3, 0) + m5!(4, 4),
-            m!(0, 4) + m!(1, 3) + m!(2, 2) + m!(3, 1) + m!(4, 0),
-        ];
-
-        // if self and b is reduced, v[i] <= 25 * (2^26 - 1)^2
-
-        let mut carry = 0;
-
-        macro_rules! reduce_digit {
-            ($i:expr) => {{
-                v[$i] += carry;
-                carry = v[$i] >> 26;
-                v[$i] &= (1 << 26) - 1;
-            }};
-        }
-
-        reduce_digit!(0); // carry <= 25 * (2^26 - 1)
-        reduce_digit!(1); // again, carry <= 25 * (2^26 - 1)
-        reduce_digit!(2);
-        reduce_digit!(3);
-        reduce_digit!(4);
-
-        debug_assert_eq!(v[0] >> 32, 0);
-        debug_assert_eq!(v[1] >> 32, 0);
-        debug_assert_eq!(v[2] >> 32, 0);
-        debug_assert_eq!(v[3] >> 32, 0);
-        debug_assert_eq!(v[4] >> 32, 0);
-
-        debug_assert!(carry <= 25 * ((1 << 26) - 1));
-
-        carry *= 5; // carry <= 125 * (2^26 - 1)
-
-        reduce_digit!(0); // carry <= 125
-        reduce_digit!(1); // carry <= 1
-        reduce_digit!(2);
-        reduce_digit!(3);
-        reduce_digit!(4);
-
-        debug_assert_eq!(v[0] >> 32, 0);
-        debug_assert_eq!(v[1] >> 32, 0);
-        debug_assert_eq!(v[2] >> 32, 0);
-        debug_assert_eq!(v[3] >> 32, 0);
-        debug_assert_eq!(v[4] >> 32, 0);
-
-        debug_assert!(carry <= 1);
-
-        carry *= 5; // carry <= 5
-
-        reduce_digit!(0);
-        reduce_digit!(1);
-        reduce_digit!(2);
-        reduce_digit!(3);
-        reduce_digit!(4);
-
-        debug_assert_eq!(v[0] >> 32, 0);
-        debug_assert_eq!(v[1] >> 32, 0);
-        debug_assert_eq!(v[2] >> 32, 0);
-        debug_assert_eq!(v[3] >> 32, 0);
-        debug_assert_eq!(v[4] >> 32, 0);
-
-        debug_assert_eq!(carry, 0);
-
-        Int1305 {
-            v: [
-                v[0] as u32,
-                v[1] as u32,
-                v[2] as u32,
-                v[3] as u32,
-                v[4] as u32,
-            ],
+pub fn authenticate(msg: &[u8], r: &[u8; 16], s: &[u8; 16]) -> [u8; 16] {
+    let mut ret = [0u8; 16];
+    let mut p = Poly1305::new(r, s);
+    for block in msg.chunks(16) {
+        if block.len() == 16 {
+            p.compute_block(block.try_into().unwrap(), false);
+        } else {
+            let mut filled_block = [0u8; 16];
+            filled_block[..block.len()].copy_from_slice(block);
+            filled_block[block.len()] = 1;
+            p.compute_block(&filled_block, true);
         }
     }
-
-    fn from_bytes(msg: &[u8; 16]) -> Int1305 {
-        macro_rules! b4 {
-            ($i:expr, $n:expr) => {
-                ((msg[$i] as u32) >> $n)
-                    | ((msg[$i + 1] as u32) << (8 - $n))
-                    | ((msg[$i + 2] as u32) << (16 - $n))
-                    | (((msg[$i + 3] as u32) & ((1 << (2 + $n)) - 1)) << (24 - $n))
-            };
-        }
-        macro_rules! b3 {
-            ($i:expr, $n:expr) => {
-                ((msg[$i] as u32) >> $n)
-                    | ((msg[$i + 1] as u32) << (8 - $n))
-                    | ((msg[$i + 2] as u32) << (16 - $n))
-            };
-        }
-
-        let v = [
-            b4!(0, 0),
-            b4!(3, 26 * 1 - 8 * 3),
-            b4!(6, 26 * 2 - 8 * 6),
-            b4!(9, 26 * 3 - 8 * 9),
-            b3!(13, 0),
-        ];
-
-        debug_assert_eq!(v[0] >> 26, 0);
-        debug_assert_eq!(v[1] >> 26, 0);
-        debug_assert_eq!(v[2] >> 26, 0);
-        debug_assert_eq!(v[3] >> 26, 0);
-        debug_assert_eq!(v[4] >> 26, 0);
-
-        Int1305 { v: v }
-    }
-
-    // self must be reduced
-    fn normalize(&self) -> Int1305 {
-        // we have two possibilities: (a) 0 <= self <= p - 1, (b) p <= self <= 2 * p - 1
-        // we must return self - p in case of (b)
-        // if 2^130 - 5 <= a + b <= 2^131 - 11, 2^130 <= a + b + 5 <= 2^131 - 6
-        // therefore (a + b + 5) >> 130 == 1 and (a + b - p) == (a + b + 5) & !(1 << 130)
-        // here we compute a + b + 5 + (0b111...111 << 130) to eliminate `& !(1 << 130)` part
-
-        static P5: [u64; 5] = [5, 0, 0, 0, ((1 << 6) - 1) << 26];
-
-        let mut ret_b = Int1305 { v: [0; 5] };
-        let mut carry = 0;
-
-        macro_rules! add_digit {
-            ($($i:expr)+) => ({
-                $(
-                    let v = (self.v[$i] as u64) + P5[$i] + carry;
-                    carry = v >> 26;
-                    ret_b.v[$i] = (v & ((1 << 26) - 1)) as u32;
-                )+
-            })
-        }
-        add_digit! {0 1 2 3}
-        ret_b.v[4] = ((self.v[4] as u64) + P5[4] + carry) as u32;
-
-        let is_case_b = ret_b.v[4] >> 31;
-
-        Int1305::choose(is_case_b, &ret_b, self)
-    }
-}
-
-pub fn authenticate(msg: &[u8], r: &[u8; 16], aes: &[u8; 16]) -> [u8; 16] {
-    let mut r = *r;
-    r[3] &= 15;
-    r[4] &= 252;
-    r[7] &= 15;
-    r[8] &= 252;
-    r[11] &= 15;
-    r[12] &= 252;
-    r[15] &= 15;
-
-    let r = Int1305::from_bytes(&r);
-
-    // c[0] * r^q + c[1] * r^(q-1) + ... + c[q-1] * r
-    // = (((c[0] * r + c[1]) * r) + ... + c[q-1]) * r
-    let mut h = ZERO;
-
-    let len = msg.len();
-    let chunks = (len + 15) / 16;
-    for i in 0..chunks {
-        // c[i] = sum_i (m[16*i] * 2^8) + 2^128
-
-        let mut m = [0u8; 16];
-        let m_len = if i < chunks - 1 { 16 } else { len - 16 * i };
-        for j in 0..m_len {
-            m[j] = msg[i * 16 + j];
-        }
-        let mut c = Int1305::from_bytes(&m);
-
-        // append 1 to the chunk
-        let flag_pos = m_len * 8;
-        c.v[flag_pos / 26] |= 1 << (flag_pos % 26);
-
-        h = c.add(&h).mult(&r);
-    }
-
-    let h = h.normalize();
-    let h = {
-        macro_rules! b {
-            ($i:expr, $n:expr) => {
-                Wrapping(h.v[$i] >> $n).to_w8().0
-            };
-            ($i:expr, $n:expr, $m:expr) => {
-                Wrapping((h.v[$i] >> $n) | (h.v[$i + 1] & ((1 << $m) - 1)) << (8 - $m))
-                    .to_w8()
-                    .0
-            };
-        }
-
-        [
-            b!(0, 0),
-            b!(0, 8),
-            b!(0, 16),
-            b!(0, 24, 6), // 6 == 8 * 4 - 26 * 1
-            b!(1, 6),
-            b!(1, 6 + 8),
-            b!(1, 6 + 16, 4), // 4 == 8 * 7 - 26 * 2
-            b!(2, 4),
-            b!(2, 4 + 8),
-            b!(2, 4 + 16, 2), // 2 == 8 * 10 - 26 * 3
-            b!(3, 2),
-            b!(3, 2 + 8),
-            b!(3, 2 + 16),
-            b!(4, 0),
-            b!(4, 8),
-            b!(4, 16),
-            //b!(4, 0 + 24), // discard 2 bits: mod 2^128
-        ]
-    };
-
-    // h + aes (mod 2^128)
-    let ret = {
-        let mut ret = [0; 16];
-
-        macro_rules! to_u32 {
-            ($a:expr, $i:expr) => {
-                ($a[$i] as u32)
-                    | ($a[$i + 1] as u32) << 8
-                    | ($a[$i + 2] as u32) << 16
-                    | ($a[$i + 3] as u32) << 24
-            };
-        }
-
-        let h32 = [to_u32!(h, 0), to_u32!(h, 4), to_u32!(h, 8), to_u32!(h, 12)];
-        let aes32 = [
-            to_u32!(aes, 0),
-            to_u32!(aes, 4),
-            to_u32!(aes, 8),
-            to_u32!(aes, 12),
-        ];
-
-        let mut carry = 0;
-
-        let sum = (h32[0] as u64) + (aes32[0] as u64) + carry;
-        let ret0 = sum as u32;
-        carry = sum >> 32;
-
-        let sum = (h32[1] as u64) + (aes32[1] as u64) + carry;
-        let ret1 = sum as u32;
-        carry = sum >> 32;
-
-        let sum = (h32[2] as u64) + (aes32[2] as u64) + carry;
-        let ret2 = sum as u32;
-        carry = sum >> 32;
-
-        let sum = (h32[3] as u64) + (aes32[3] as u64) + carry;
-        let ret3 = sum as u32;
-
-        macro_rules! to_u8 {
-            ($a:expr, $r:expr, $i:expr) => {{
-                $a[$i] = Wrapping($r).to_w8().0;
-                $a[$i + 1] = Wrapping($r >> 8).to_w8().0;
-                $a[$i + 2] = Wrapping($r >> 16).to_w8().0;
-                $a[$i + 3] = Wrapping($r >> 24).to_w8().0;
-            }};
-        }
-
-        to_u8!(ret, ret0, 0);
-        to_u8!(ret, ret1, 4);
-        to_u8!(ret, ret2, 8);
-        to_u8!(ret, ret3, 12);
-
-        ret
-    };
-
-    ret
+    p.finalize(&mut ret);
+    return ret;
 }
 
 #[cfg(test)]
 mod test {
-    use super::Int1305;
-
-    static COEFFS: &'static [Int1305] = &[
-        super::ZERO,
-        Int1305 { v: [1, 0, 0, 0, 0] },
-        Int1305 { v: [1, 1, 1, 1, 1] },
-        Int1305 {
-            v: [
-                (1 << 26) - 1,
-                (1 << 26) - 1,
-                (1 << 26) - 1,
-                (1 << 26) - 1,
-                (1 << 25) - 1,
-            ],
-        },
-        Int1305 { v: [0, 1, 2, 3, 4] },
-        Int1305 { v: [5, 6, 7, 8, 9] },
-        Int1305 {
-            v: [1 << 23, 3 << 20, 0, 5 << 21, 0],
-        },
-        Int1305 { v: [1 << 20; 5] },
-        Int1305 { v: [1 << 24; 5] },
-        Int1305 {
-            v: [(1 << 25) - 1; 5],
-        },
-        Int1305 {
-            v: [0x3fffffb - 1, 0x3ffffff, 0x3ffffff, 0x3ffffff, 0x3ffffff],
-        }, // p - 1
-    ];
-
-    impl PartialEq for Int1305 {
-        fn eq(&self, b: &Int1305) -> bool {
-            self.normalize().v == b.normalize().v
-        }
-    }
-
-    impl std::fmt::Debug for Int1305 {
-        fn fmt(&self, a: &mut std::fmt::Formatter) -> std::fmt::Result {
-            (self.v).fmt(a)
-        }
-    }
-
-    #[test]
-    fn test_add() {
-        // (a + b) + c == a + (b + c)
-        for a in COEFFS.iter() {
-            for b in COEFFS.iter() {
-                for c in COEFFS.iter() {
-                    let abc = a.add(b).add(c);
-
-                    let bca = b.add(c).add(a);
-                    assert_eq!(abc, bca);
-
-                    let acb = a.add(c).add(b);
-                    assert_eq!(abc, acb);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_normalize() {
-        let p = Int1305 {
-            v: [0x3fffffb, 0x3ffffff, 0x3ffffff, 0x3ffffff, 0x3ffffff],
-        };
-        assert_eq!(&p.normalize().v, &super::ZERO.v);
-
-        let large = Int1305 {
-            v: [0, 10, 5, 10, 1 << 26],
-        };
-        let small = Int1305 {
-            v: [5, 10, 5, 10, 0],
-        };
-
-        assert_eq!(&large.normalize().v, &small.v);
-        assert_eq!(&small.normalize().v, &small.v);
-
-        for a in COEFFS.iter() {
-            assert_eq!(a.normalize(), *a);
-        }
-    }
-
-    #[test]
-    fn test_mult() {
-        // (a * b) * c == a * (b * c)
-        for a in COEFFS.iter() {
-            for b in COEFFS.iter() {
-                for c in COEFFS.iter() {
-                    let abc = a.mult(b).mult(c).normalize();
-
-                    let bca = b.mult(c).mult(a).normalize();
-                    assert_eq!(abc, bca);
-
-                    let acb = a.mult(c).mult(b).normalize();
-                    assert_eq!(abc, acb);
-                }
-            }
-        }
-    }
-
     #[test]
     fn test_poly1305_examples() {
         // from Appendix B of reference paper

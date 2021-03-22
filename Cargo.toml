@@ -6,5 +6,6 @@ edition = "2018"
 
 [dependencies]
 num = "^0.4"
+byteorder = "^1.4"
 enum_primitive = "^0.1"
 rand = { version = "^0.8", features = ["getrandom"] }
