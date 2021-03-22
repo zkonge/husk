@@ -1,83 +1,52 @@
-// http://cr.yp.to/chacha/chacha-20080128.pdf
-// http://cr.yp.to/chacha.html
 // https://tools.ietf.org/html/rfc7539
-// NOTICE: Chacha20 has 3 variants, TLS 1.2 finally uses Chacha20-ieft
+// Chacha20 has 3 variants, TLS 1.2 uses Chacha20-ieft
 
-use crate::crypto::wrapping::*;
-
-// convert $e.slice($i, $i + 4) into u32
-macro_rules! to_le_u32 {
-    ($e:ident[$i:expr]) => ({
-        let i: usize = $i;
-        let v1 = w8($e[i + 0]).to_w32();
-        let v2 = w8($e[i + 1]).to_w32();
-        let v3 = w8($e[i + 2]).to_w32();
-        let v4 = w8($e[i + 3]).to_w32();
-        v1 | (v2 << 8) | (v3 << 16) | (v4 << 24)
-    })
-}
+use byteorder::{ByteOrder, LittleEndian};
 
 pub struct ChaCha20 {
-    // SECRET
-    vals: [w32; 16],
+    vals: [u32; 16],
 }
 
 impl ChaCha20 {
-    // key: SECRET
     pub fn new(key: &[u8], nonce: &[u8]) -> ChaCha20 {
         assert_eq!(key.len(), 32);
         assert_eq!(nonce.len(), 12);
 
-        let mut vals = [w32(0u32); 16];
+        let mut vals = [0; 16];
 
         // "expand 32-byte k"
-        vals[0] = w32(0x61707865);
-        vals[1] = w32(0x3320646e);
-        vals[2] = w32(0x79622d32);
-        vals[3] = w32(0x6b206574);
+        vals[0] = 0x61707865;
+        vals[1] = 0x3320646e;
+        vals[2] = 0x79622d32;
+        vals[3] = 0x6b206574;
 
-        for i in 0..8 {
-            vals[4 + i] = to_le_u32!(key[4 * i]);
-        }
+        LittleEndian::read_u32_into(key, &mut vals[4..12]);
 
-        // counter
-        vals[12] = w32(0);
-        // vals[13] = w32(0);// Old Chacha20, deprecated
+        vals[12] = 0; // counter
 
-        vals[13] = to_le_u32!(nonce[0]);
-        vals[14] = to_le_u32!(nonce[4]);
-        vals[15] = to_le_u32!(nonce[8]);// TODO:support u96
+        LittleEndian::read_u32_into(nonce, &mut vals[13..16]);
 
         ChaCha20 { vals }
     }
 
-    fn round20(&self) -> [w32; 16] {
-        // $e must be > 0 and < 32
-        macro_rules! rot {
-            ($a:expr, $e:expr) => ({
-                let a: w32 = $a;
-                let e: usize = $e;
-                (a << e) | (a >> (32 - e))
-            })
-        }
-
+    fn round20(&self) -> [u32; 16] {
         macro_rules! quarter_round {
             ($a:expr, $b:expr, $c:expr, $d:expr) => {{
-                $a = $a + $b;
+                $a = $a.wrapping_add($b);
                 $d = $d ^ $a;
-                $d = rot!($d, 16);
+                $d = $d.rotate_left(16);
 
-                $c = $c + $d;
+                $c = $c.wrapping_add($d);
                 $b = $b ^ $c;
-                $b = rot!($b, 12);
+                $b = $b.rotate_left(12);
 
-                $a = $a + $b;
+                $a = $a.wrapping_add($b);
                 $d = $d ^ $a;
-                $d = rot!($d, 8);
+                $d = $d.rotate_left(8);
 
-                $c = $c + $d;
+                $c = $c.wrapping_add($d);
                 $b = $b ^ $c;
-                $b = rot!($b, 7);
+                $b = $b.rotate_left(7);
             }};
         }
 
@@ -90,20 +59,20 @@ impl ChaCha20 {
         let mut vals = self.vals;
         for _ in 0..10 {
             // column round
-            quarter_round_idx!(vals, 0, 4, 8, 12);
-            quarter_round_idx!(vals, 1, 5, 9, 13);
-            quarter_round_idx!(vals, 2, 6, 10, 14);
-            quarter_round_idx!(vals, 3, 7, 11, 15);
+            quarter_round_idx!(vals, 0x0, 0x4, 0x8, 0xC);
+            quarter_round_idx!(vals, 0x1, 0x5, 0x9, 0xD);
+            quarter_round_idx!(vals, 0x2, 0x6, 0xA, 0xE);
+            quarter_round_idx!(vals, 0x3, 0x7, 0xB, 0xF);
 
             // diagonal round
-            quarter_round_idx!(vals, 0, 5, 10, 15);
-            quarter_round_idx!(vals, 1, 6, 11, 12);
-            quarter_round_idx!(vals, 2, 7, 8, 13);
-            quarter_round_idx!(vals, 3, 4, 9, 14);
+            quarter_round_idx!(vals, 0x0, 0x5, 0xA, 0xF);
+            quarter_round_idx!(vals, 0x1, 0x6, 0xB, 0xC);
+            quarter_round_idx!(vals, 0x2, 0x7, 0x8, 0xD);
+            quarter_round_idx!(vals, 0x3, 0x4, 0x9, 0xE);
         }
 
         for i in 0..16 {
-            vals[i] += self.vals[i];
+            vals[i] = vals[i].wrapping_add(self.vals[i]);
         }
 
         vals
@@ -112,25 +81,11 @@ impl ChaCha20 {
     pub fn next(&mut self) -> [u8; 64] {
         let next = self.round20();
 
-        // in TLS, vals[13] never increases
-        {
-            self.vals[12] += w32(1);
-            // let mut count = (self.vals[12].to_w64()) | (self.vals[13].to_w64() << 32);
-            // count += w64(1);
-            // self.vals[12] = count.to_w32();
-            // self.vals[13] = (count >> 32).to_w32();
-        }
+        // increase counter
+        self.vals[12] += 1;
 
-        let next_bytes = {
-            let mut next_bytes = [0u8; 64];
-            for i in 0..16 {
-                next_bytes[4 * i] = next[i].to_w8().0;
-                next_bytes[4 * i + 1] = (next[i] >> 8).to_w8().0;
-                next_bytes[4 * i + 2] = (next[i] >> 16).to_w8().0;
-                next_bytes[4 * i + 3] = (next[i] >> 24).to_w8().0;
-            }
-            next_bytes
-        };
+        let mut next_bytes = [0u8; 64];
+        LittleEndian::write_u32_into(&next, &mut next_bytes);
 
         next_bytes
     }
@@ -142,7 +97,7 @@ impl ChaCha20 {
     //
     // data: SECRET
     pub fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {
-        let mut ret: Vec<u8> = Vec::new();
+        let mut ret: Vec<u8> = Vec::with_capacity(data.len());
 
         for chunk in data.chunks(64) {
             let next = self.next();
