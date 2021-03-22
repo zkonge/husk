@@ -1,5 +1,5 @@
 #![crate_type = "lib"]
-#![crate_name = "baozi"]
+#![crate_name = "husk"]
 
 extern crate num;
 extern crate rand;
