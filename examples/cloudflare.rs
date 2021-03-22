@@ -5,7 +5,7 @@ use std::{
 
 fn main() {
     let stream = TcpStream::connect("www.cloudflare.com:443").unwrap();
-    let mut client = baozi::TlsClient::from_tcp(stream).unwrap();
+    let mut client = husk::TlsClient::from_tcp(stream).unwrap();
     let _len = client
         .write(b"HEAD / HTTP/1.1\r\nHost: www.cloudflare.com\r\nConnection: close\r\n\r\n")
         .unwrap();
