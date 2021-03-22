@@ -1,9 +1,8 @@
 # husk
 Minimal TLS 1.2 implimentation in **100% pure** Rust.
 
-<center>
-<b>IT'S NOT SECURE NOW!</b>
-</center>
+**IT'S NOT SECURE NOW!**
+
 Authentication can't works at all, although you can establish connection, you can't confirm remote identity.
 
 Don't use it in real world.
