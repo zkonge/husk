@@ -224,8 +224,7 @@ impl<R: Read, W: Write> TlsClient<R, W> {
                 Write::write_all(&mut serv_msgs, &msgs)?;
                 finished.tls_write(&mut serv_msgs)?;
 
-                let verify_hash = sha256(&serv_msgs);
-                verify_hash
+                sha256(&serv_msgs)
             };
 
             let server_verify_data = {
@@ -259,13 +258,13 @@ impl<R: Read, W: Write> TlsClient<R, W> {
     // (it may be different to `err`, because writing alert can fail)
     pub fn send_tls_alert(&mut self, err: TlsError) -> TlsError {
         match err.kind {
-            TlsErrorKind::IoFailure => return err,
+            TlsErrorKind::IoFailure => err,
             _ => {
                 let alert = alert::Alert::from_tls_err(&err);
                 let result = self.writer.write_alert(&alert);
                 match result {
-                    Ok(()) => return err,
-                    Err(err) => return err,
+                    Ok(()) => err,
+                    Err(err) => err,
                 }
             }
         }
@@ -328,7 +327,7 @@ impl<R: Read, W: Write> Read for TlsClient<R, W> {
         let len = buf.len();
         while pos < len {
             let remaining = len - pos;
-            if self.buf.len() == 0 {
+            if self.buf.is_empty() {
                 let data = match self.reader.read_application_data() {
                     Ok(data) => data,
                     Err(_err) => {

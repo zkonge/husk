@@ -36,13 +36,9 @@ fn compute_mac(poly_key: &[u8], encrypted: &[u8], ad: &[u8]) -> [u8; MAC_LEN] {
     msg.extend(&u64_le_array(encrypted.len() as u64));
 
     let mut r = [0u8; MAC_LEN];
-    for i in 0..MAC_LEN {
-        r[i] = poly_key[i];
-    }
+    r[..MAC_LEN].clone_from_slice(&poly_key[..MAC_LEN]);
     let mut k = [0u8; MAC_LEN];
-    for i in 0..MAC_LEN {
-        k[i] = poly_key[MAC_LEN + i];
-    }
+    k[..MAC_LEN].clone_from_slice(&poly_key[MAC_LEN..(MAC_LEN + MAC_LEN)]);
 
     poly1305::authenticate(&msg, &r, &k)
 }

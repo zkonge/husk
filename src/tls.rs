@@ -135,9 +135,7 @@ impl<W: Write> TlsWriter<W> {
                         .zip(iv.iter())
                         .for_each(|(nonce, ivk)| *nonce ^= *ivk);
                 }
-
-                let encrypted_fragment = encryptor.encrypt(&u96_seq_num, &record.fragment, &ad);
-                encrypted_fragment
+                encryptor.encrypt(&u96_seq_num, &record.fragment, &ad)
             }
         };
 
@@ -336,9 +334,8 @@ impl<R: ReadExt> TlsReader<R> {
     ///
     /// We treat partial alert message as an error and returns `UnexpectedMessage`.
     pub fn read_message(&mut self) -> TlsResult<Message> {
-        match self.handshake_buffer.get_message()? {
-            Some(handshake_msg) => return Ok(HandshakeMessage(handshake_msg)),
-            None => {}
+        if let Some(handshake_msg) = self.handshake_buffer.get_message()? {
+            return Ok(HandshakeMessage(handshake_msg));
         }
 
         // ok, no message found. read it from network!
@@ -378,14 +375,13 @@ impl<R: ReadExt> TlsReader<R> {
                     }
                 }
                 HandshakeTy => {
-                    if record.fragment.len() == 0 {
+                    if record.fragment.is_empty() {
                         return tls_err!(UnexpectedMessage, "zero-length Handshake arrived");
                     }
                     self.handshake_buffer.add_record(&record.fragment);
 
-                    match self.handshake_buffer.get_message()? {
-                        Some(handshake_msg) => return Ok(HandshakeMessage(handshake_msg)),
-                        _ => {}
+                    if let Some(handshake_msg) = self.handshake_buffer.get_message()? {
+                        return Ok(HandshakeMessage(handshake_msg));
                     }
                 }
                 ApplicationDataTy => {

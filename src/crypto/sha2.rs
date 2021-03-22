@@ -54,11 +54,11 @@ pub fn sha256(msg: &[u8]) -> [u8; 32] {
         let w = {
             let mut w = [w32(0u32); 64];
             for j in 0..16 {
-                let b0 = w8(msg[i * 64 + j * 4 + 0]).to_w32();
+                let b0 = w8(msg[i * 64 + j * 4]).to_w32();
                 let b1 = w8(msg[i * 64 + j * 4 + 1]).to_w32();
                 let b2 = w8(msg[i * 64 + j * 4 + 2]).to_w32();
                 let b3 = w8(msg[i * 64 + j * 4 + 3]).to_w32();
-                w[j] = (b0 << 8 * 3) | (b1 << 8 * 2) | (b2 << 8 * 1) | b3;
+                w[j] = (b0 << 8 * 3) | (b1 << 8 * 2) | (b2 << 8) | b3;
             }
 
             for j in 16..64 {
@@ -102,21 +102,21 @@ pub fn sha256(msg: &[u8]) -> [u8; 32] {
             a = t1 + t2;
         }
 
-        val[0] = val[0] + a;
-        val[1] = val[1] + b;
-        val[2] = val[2] + c;
-        val[3] = val[3] + d;
-        val[4] = val[4] + e;
-        val[5] = val[5] + f;
-        val[6] = val[6] + g;
-        val[7] = val[7] + h;
+        val[0] += a;
+        val[1] += b;
+        val[2] += c;
+        val[3] += d;
+        val[4] += e;
+        val[5] += f;
+        val[6] += g;
+        val[7] += h;
     }
 
     let mut ret = [0u8; 32];
     for i in 0..8 {
-        ret[i * 4 + 0] = (val[i] >> 8 * 3).to_w8().0;
+        ret[i * 4] = (val[i] >> 8 * 3).to_w8().0;
         ret[i * 4 + 1] = (val[i] >> 8 * 2).to_w8().0;
-        ret[i * 4 + 2] = (val[i] >> 8 * 1).to_w8().0;
+        ret[i * 4 + 2] = (val[i] >> 8).to_w8().0;
         ret[i * 4 + 3] = val[i].to_w8().0;
     }
     ret

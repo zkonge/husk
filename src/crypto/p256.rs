@@ -66,9 +66,9 @@ const INFTY: Point256 = Point256 {
 impl Clone for Point256 {
     fn clone(&self) -> Point256 {
         Point256 {
-            x: self.x.clone(),
-            y: self.y.clone(),
-            z: self.z.clone(),
+            x: self.x,
+            y: self.y,
+            z: self.z,
         }
     }
 }
@@ -176,8 +176,7 @@ impl Point256 {
         let y_new = {
             let t4 = ysum.mult(&xdiff3);
             let t5 = ydiff.mult(&e.sub(&x_new_2));
-            let y_new = t5.sub(&t4).divide_by_2();
-            y_new
+            t5.sub(&t4).divide_by_2()
         };
 
         // z_new = z * z' * (x - x')
@@ -207,7 +206,7 @@ impl Point256 {
     }
 
     pub fn mult_scalar(&self, n: &Int256) -> Point256 {
-        let mut ret = INFTY.clone();
+        let mut ret = INFTY;
         for i in (0..7).rev() {
             for j in (0..8).rev() {
                 let bit = (n.v[i] >> j) & W(1);
@@ -327,7 +326,7 @@ pub mod int256 {
         pub fn compare(&self, b: &Int256) -> W<u32> {
             let mut diff = W(0u32);
             for i in 0..LIMBS {
-                diff = diff | self.v[i] ^ b.v[i];
+                diff |= self.v[i] ^ b.v[i];
             }
             diff = diff | diff >> 16;
             diff = diff | diff >> 8;
@@ -341,10 +340,10 @@ pub mod int256 {
         // if flag == 1, returns b
         pub fn choose(flag: W<u32>, a: &Int256, b: &Int256) -> Int256 {
             let mut v = [W(0); LIMBS];
-            for i in 0..LIMBS {
-                v[i] = a.v[i] ^ (flag * (a.v[i] ^ b.v[i]));
+            for (i, v) in v.iter_mut().enumerate().take(LIMBS) {
+                *v = a.v[i] ^ (flag * (a.v[i] ^ b.v[i]));
             }
-            Int256 { v: v }
+            Int256 { v }
         }
 
         // return (value, carry) where
@@ -403,8 +402,7 @@ pub mod int256 {
 
         pub fn add(&self, b: &Int256) -> Int256 {
             let (v, carry) = self.add_no_reduce(b);
-            let v = v.reduce_once(carry);
-            v
+            v.reduce_once(carry)
         }
 
         pub fn double(&self) -> Int256 {
@@ -432,7 +430,7 @@ pub mod int256 {
                     let w_ij_low = w_ij.to_w32().to_w64();
                     let w_ij_high = v_ij_high + (w_ij >> 32);
                     w[ij] = w_ij_low;
-                    w[ij + 1] = w[ij + 1] + w_ij_high;
+                    w[ij + 1] += w_ij_high
                 }
             }
 
@@ -446,57 +444,45 @@ pub mod int256 {
             debug_assert_eq!(carry.0, 0);
 
             let mut buf = ZERO;
-            for i in 0..LIMBS {
-                buf.v[i] = v[i];
-            }
+            buf.v[..LIMBS].clone_from_slice(&v[..LIMBS]);
             let t = buf.reduce_once_zero();
 
             let mut buf = ZERO;
-            for i in 0..5 {
-                buf.v[i + 3] = v[i + 11];
-            }
+            buf.v[3..8].clone_from_slice(&v[11..16]);
             let s1 = buf.reduce_once_zero();
 
             let mut buf = ZERO;
-            for i in 0..4 {
-                buf.v[i + 3] = v[i + 12];
-            }
+            buf.v[3..7].clone_from_slice(&v[12..16]);
             let s2 = buf.reduce_once_zero();
 
             let mut buf = ZERO;
-            for i in 0..3 {
-                buf.v[i] = v[i + 8];
-            }
+            buf.v[..3].clone_from_slice(&v[8..11]);
             buf.v[6] = v[14];
             buf.v[7] = v[15];
             let s3 = buf.reduce_once_zero();
 
             let mut buf = ZERO;
-            for i in 0..3 {
-                buf.v[i] = v[i + 9];
-                buf.v[i + 3] = v[i + 13];
-            }
+            buf.v[..3].clone_from_slice(&v[9..12]);
+            buf.v[3..6].clone_from_slice(&v[13..16]);
             buf.v[6] = v[13];
             buf.v[7] = v[8];
             let s4 = buf.reduce_once_zero();
 
             let mut buf = ZERO;
-            for i in 0..3 {
-                buf.v[i] = v[i + 11];
-            }
+            buf.v[..3].clone_from_slice(&v[11..14]);
             buf.v[6] = v[8];
             buf.v[7] = v[10];
             let d1 = buf.reduce_once_zero();
 
             let mut buf = ZERO;
-            for i in 0..4 {
-                buf.v[i] = v[i + 12];
-            }
+            buf.v[..4].clone_from_slice(&v[12..16]);
             buf.v[6] = v[9];
             buf.v[7] = v[11];
             let d2 = buf.reduce_once_zero();
 
             let mut buf = ZERO;
+            buf.v[..3].clone_from_slice(&v[13..16]);
+            buf.v[3..6].clone_from_slice(&v[8..11]);
             for i in 0..3 {
                 buf.v[i] = v[i + 13];
                 buf.v[i + 3] = v[i + 8];
@@ -505,17 +491,14 @@ pub mod int256 {
             let d3 = buf.reduce_once_zero();
 
             let mut buf = ZERO;
-            for i in 0..3 {
-                buf.v[i + 3] = v[i + 9];
-            }
+            buf.v[3..6].clone_from_slice(&v[9..12]);
             buf.v[7] = v[13];
             buf.v[0] = v[14];
             buf.v[1] = v[15];
             let d4 = buf.reduce_once_zero();
 
             let r = t.add(&s1.double()).add(&s2.double()).add(&s3).add(&s4);
-            let r = r.sub(&d1.add(&d2).add(&d3).add(&d4));
-            r
+            r.sub(&d1.add(&d2).add(&d3).add(&d4))
         }
 
         pub fn square(&self) -> Int256 {
@@ -532,7 +515,7 @@ pub mod int256 {
 
             // compute a^(2^n)
             fn square_n(a: &Int256, n: usize) -> Int256 {
-                let mut y = a.clone();
+                let mut y = *a;
                 for _ in 0..n {
                     y = y.square();
                 }
@@ -626,7 +609,7 @@ pub mod int256 {
             for i in 0..LIMBS {
                 let mut vi = w32(0);
                 for j in 0..4 {
-                    vi = vi | w8(b[i * 4 + j]).to_w32() << ((3 - j) * 8);
+                    vi |= w8(b[i * 4 + j]).to_w32() << ((3 - j) * 8);
                 }
                 x.v[LIMBS - 1 - i] = vi;
             }

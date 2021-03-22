@@ -165,7 +165,7 @@ macro_rules! tls_array {
 
         impl TlsItem for $name {
             fn tls_write<W: WriteExt>(&self, writer: &mut W) -> $crate::tls_result::TlsResult<()> {
-                writer.write(&self.0)?;
+                writer.write_all(&self.0)?;
                 Ok(())
             }
 
@@ -409,7 +409,7 @@ impl ObscureData {
 
 impl std::ops::Deref for ObscureData {
     type Target = [u8];
-    fn deref<'a>(&'a self) -> &'a [u8] {
+    fn deref(&self) -> &[u8] {
         &self.0
     }
 }

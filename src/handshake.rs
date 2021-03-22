@@ -100,7 +100,7 @@ macro_rules! tls_hello_extension {
                     $enum_name::Unknown(extension_type, ref extension_data) => {
                         try_write_num!(u16, writer, extension_type);
                         try_write_num!(u16, writer, extension_data.len() as u16);
-                        writer.write(extension_data)?;
+                        writer.write_all(extension_data)?;
                     }
                 }
                 Ok(())
@@ -368,9 +368,7 @@ impl HandshakeBuffer {
 
         let reader = &mut &message[..];
         let message: Handshake = TlsItem::tls_read(reader)?;
-        let ret = Ok(Some(message));
-
-        ret
+        Ok(Some(message))
     }
 }
 
@@ -402,7 +400,7 @@ impl Handshake {
                 CompressionMethodVec::new(data)?
             };
 
-            let extensions = if extensions.len() == 0 {
+            let extensions = if extensions.is_empty() {
                 None
             } else {
                 let ext = ExtensionVec::new(extensions)?;

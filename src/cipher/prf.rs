@@ -23,9 +23,8 @@ pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
     i_msg.extend(msg);
     let h_i = sha256(&i_msg);
     o_msg.extend(&h_i);
-    let h_o = sha256(&o_msg);
 
-    h_o
+    sha256(&o_msg)
 }
 
 pub struct Prf {

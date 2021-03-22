@@ -103,7 +103,7 @@ impl ChaCha20 {
         }
 
         for i in 0..16 {
-            vals[i] = vals[i] + self.vals[i];
+            vals[i] += self.vals[i];
         }
 
         vals
@@ -114,7 +114,7 @@ impl ChaCha20 {
 
         // in TLS, vals[13] never increases
         {
-            self.vals[12] = self.vals[12] + w32(1);
+            self.vals[12] += w32(1);
             // let mut count = (self.vals[12].to_w64()) | (self.vals[13].to_w64() << 32);
             // count += w64(1);
             // self.vals[12] = count.to_w32();
@@ -124,7 +124,7 @@ impl ChaCha20 {
         let next_bytes = {
             let mut next_bytes = [0u8; 64];
             for i in 0..16 {
-                next_bytes[4 * i + 0] = next[i].to_w8().0;
+                next_bytes[4 * i] = next[i].to_w8().0;
                 next_bytes[4 * i + 1] = (next[i] >> 8).to_w8().0;
                 next_bytes[4 * i + 2] = (next[i] >> 16).to_w8().0;
                 next_bytes[4 * i + 3] = (next[i] >> 24).to_w8().0;
