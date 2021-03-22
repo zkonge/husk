@@ -9,7 +9,10 @@ use crate::tls_result::TlsErrorKind::{
 };
 use crate::tls_result::TlsResult;
 use crate::util::{ReadExt, WriteExt};
-use crate::{alert::Alert, util::u64_be_array};
+use crate::{
+    alert::{Alert, AlertDescription},
+    util::u64_be_array,
+};
 
 use self::ContentType::{AlertTy, ApplicationDataTy, ChangeCipherSpecTy, HandshakeTy};
 use self::Message::{
@@ -401,6 +404,10 @@ impl<R: ReadExt> TlsReader<R> {
             match msg {
                 ApplicationDataMessage(msg) => return Ok(msg),
                 // TODO: handle other cases
+                AlertMessage(Alert {
+                    level: _,
+                    description: AlertDescription::close_notify,
+                }) => return Ok(vec![]),
                 AlertMessage(..) => unimplemented!(),
                 ChangeCipherSpecMessage => unimplemented!(), // this should not come here
                 HandshakeMessage(..) => unimplemented!(),    // TODO: re-handshake
