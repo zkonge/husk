@@ -5,6 +5,8 @@
 // they differ in detail, so here we follow google/boringssl implementation.
 // openssl 1.0.2-aead branch seems to implement draft 01.
 
+use std::iter;
+
 use super::{Aead, Decryptor, Encryptor};
 use crate::crypto::chacha20::ChaCha20;
 use crate::crypto::poly1305;
@@ -19,21 +21,17 @@ const MAC_LEN: usize = 16;
 fn compute_mac(poly_key: &[u8], encrypted: &[u8], ad: &[u8]) -> [u8; MAC_LEN] {
     let mut msg = Vec::new();
 
-    // follow draft-agl-tls-chacha20poly1305-04: data first, length later
-    // note that in draft-agl-tls-chacha20poly1305-01 length is first
-
-    // Old chacha20poly1305
-    // fn push_all_with_len(vec: &mut Vec<u8>, data: &[u8]) {
-    //     vec.extend(data);
-    //     vec.extend(&u64_le_array(data.len() as u64));
-    // }
-
-    // push_all_with_len(&mut msg, ad);
-    // push_all_with_len(&mut msg, encrypted);
-
     // Chacha20Poly1305-ieft
     msg.extend(ad);
+    let padding_len = 16 - (ad.len() % 16);
+    if padding_len != 16 {
+        msg.extend(iter::repeat(0).take(padding_len));
+    }
     msg.extend(encrypted);
+    let padding_len = 16 - (encrypted.len() % 16);
+    if padding_len != 16 {
+        msg.extend(iter::repeat(0).take(padding_len));
+    }
     msg.extend(&u64_le_array(ad.len() as u64));
     msg.extend(&u64_le_array(encrypted.len() as u64));
 
@@ -145,11 +143,26 @@ mod test {
 
     #[test]
     fn test_chacha20_poly1305() {
-        let key = vec![1u8; 32];
-        let plain = vec![1u8; 32];
-        let nonce = vec![1u8; 12];
-        let mut enc = ChaCha20Poly1305 {}.new_encryptor(key);
-        let r = enc.encrypt(&nonce, &plain, &[1u8; 32]);
-        assert_eq!(r.as_slice(),b"\xf0/\xea.\xbd\xd0\xb1\xee\xc6\xc9'P\x9fL\xbb$\x10}\xc0b\xfa\x0b\xa7\\\xd3\x10Q\x98\xda\x00\xc9\x98%jK\x13\rH\xba\xd0&\x0cp|\xbbE\xbe\xf4");
+        let key = vec![
+            78, 124, 134, 194, 178, 159, 186, 121, 39, 150, 125, 52, 41, 43, 133, 188, 16, 113, 83,
+            255, 47, 98, 231, 194, 142, 108, 49, 193, 59, 172, 221, 210,
+        ];
+        let plain = vec![
+            20, 0, 0, 12, 82, 176, 48, 66, 102, 149, 142, 132, 230, 204, 153, 206,
+        ];
+        let nonce = vec![63, 143, 158, 193, 12, 74, 32, 200, 246, 116, 243, 3];
+        let aad = vec![0, 0, 0, 0, 0, 0, 0, 0, 22, 3, 3, 0, 16];
+        let mut enc = ChaCha20Poly1305 {}.new_encryptor(key.clone());
+        let r = enc.encrypt(&nonce, &plain, &aad);
+        assert_eq!(
+            r.as_slice(),
+            &[
+                117, 99, 17, 144, 9, 64, 124, 90, 213, 214, 44, 59, 54, 152, 33, 165, 154, 213,
+                114, 86, 225, 115, 178, 58, 128, 128, 233, 241, 148, 121, 248, 25
+            ]
+        );
+        let mut dec = ChaCha20Poly1305 {}.new_decryptor(key);
+        let r = dec.decrypt(&nonce, r.as_slice(), &aad).unwrap();
+        assert_eq!(r, plain);
     }
 }

@@ -1,4 +1,7 @@
-use std::{io::{Read, Write}, net::TcpStream};
+use std::{
+    io::{Read, Write},
+    net::TcpStream,
+};
 
 fn main() {
     let stream = TcpStream::connect("www.cloudflare.com:443").unwrap();

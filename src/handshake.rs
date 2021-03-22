@@ -1,10 +1,13 @@
 use crate::cipher::CipherSuite;
-use crate::signature::SignatureAndHashAlgorithmVec;
 use crate::tls::TLS_VERSION;
 use crate::tls_item::{DummyItem, ObscureData, TlsItem};
 use crate::tls_result::TlsErrorKind::{DecodeError, InternalError, UnexpectedMessage};
 use crate::tls_result::TlsResult;
 use crate::util::{ReadExt, WriteExt};
+
+pub use crate::signature::{
+    HashAlgorithm, SignatureAlgorithm, SignatureAndHashAlgorithm, SignatureAndHashAlgorithmVec,
+};
 
 // This is actually `struct { gmt_unix_time: u32, random_bytes: [u8, ..28] }`
 // cf: http://tools.ietf.org/html/draft-mathewson-no-gmtunixtime-00
@@ -149,8 +152,8 @@ tls_hello_extension!(
         //status_request(5),
         // RFC 4492
         elliptic_curves(EllipticCurveList) = 10,
-        ec_point_formats(ECPointFormatList) = 11, // RFC 5246
-                                                  //signature_algorithms(13)
+        ec_point_formats(ECPointFormatList) = 11,
+        signature_algorithms(SignatureAndHashAlgorithmVec) = 13,
     }
 );
 
@@ -164,6 +167,14 @@ impl Extension {
     pub fn new_ec_point_formats(list: Vec<ECPointFormat>) -> TlsResult<Extension> {
         let list = ECPointFormatList::new(list)?;
         let list = Extension::ec_point_formats(list);
+        Ok(list)
+    }
+
+    pub fn new_signature_algorithm_list(
+        list: Vec<SignatureAndHashAlgorithm>,
+    ) -> TlsResult<Extension> {
+        let list = SignatureAndHashAlgorithmVec::new(list)?;
+        let list = Extension::signature_algorithms(list);
         Ok(list)
     }
 }
@@ -372,11 +383,7 @@ impl Handshake {
         let client_hello_body = {
             let client_version = {
                 let (major, minor) = TLS_VERSION;
-
-                ProtocolVersion {
-                    major,
-                    minor,
-                }
+                ProtocolVersion { major, minor }
             };
 
             // TODO support session resumption
@@ -427,9 +434,9 @@ impl Handshake {
 
 #[cfg(test)]
 mod test {
-    use std::io::Cursor;
     use crate::cipher::CipherSuite;
     use crate::tls_item::TlsItem;
+    use std::io::Cursor;
 
     use super::{
         CipherSuiteVec, ClientHello, CompressionMethod, CompressionMethodVec, Handshake,

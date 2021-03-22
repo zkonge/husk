@@ -126,12 +126,12 @@ impl<W: Write> TlsWriter<W> {
                 ad.push((frag_len >> 8) as u8);
                 ad.push(frag_len as u8);
 
-                println!("seq:{:02X?}",u96_seq_num);
-                println!("iv :{:02X?}",self.iv);
                 if let Some(ref iv) = self.iv {
-                    u96_seq_num.iter_mut().zip(iv).for_each(|x| *x.0 ^= x.1); //TODO performance improve
+                    u96_seq_num
+                        .iter_mut()
+                        .zip(iv.iter())
+                        .for_each(|(nonce, ivk)| *nonce ^= *ivk);
                 }
-                println!("res:{:02X?}",u96_seq_num);
 
                 let encrypted_fragment = encryptor.encrypt(&u96_seq_num, &record.fragment, &ad);
                 encrypted_fragment
@@ -299,7 +299,10 @@ impl<R: ReadExt> TlsReader<R> {
                 ad.push(frag_len as u8);
 
                 if let Some(ref iv) = self.iv {
-                    u96_seq_num.iter_mut().zip(iv).for_each(|x| *x.0 ^= x.1); //TODO performance improve
+                    u96_seq_num
+                        .iter_mut()
+                        .zip(iv.iter())
+                        .for_each(|(nonce, ivk)| *nonce ^= *ivk);
                 }
 
                 // TODO: "seq_num as nonce" is chacha20poly1305-specific
@@ -416,8 +419,7 @@ impl<R: ReadExt> TlsReader<R> {
     pub fn read_change_cipher_spec(&mut self) -> TlsResult<()> {
         match self.read_message()? {
             ChangeCipherSpecMessage => Ok(()),
-            AlertMessage(e) => {
-                eprintln!("Alert: {:?}", e.description);
+            AlertMessage(..) => {
                 tls_err!(UnexpectedMessage, "expected ChangeCipherSpec, get alert")
             }
             _ => tls_err!(UnexpectedMessage, "expected ChangeCipherSpec"),

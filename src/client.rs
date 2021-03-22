@@ -78,7 +78,14 @@ impl<R: Read, W: Write> TlsClient<R, W> {
         let format_list = vec![handshake::ECPointFormat::uncompressed];
         let format_list = handshake::Extension::new_ec_point_formats(format_list)?;
 
-        let extensions = vec![curve_list, format_list];
+        let sh = handshake::SignatureAndHashAlgorithm {
+            signature: handshake::SignatureAlgorithm::rsa,
+            hash: handshake::HashAlgorithm::sha256,
+        };
+        let signature_list = vec![sh];
+        let signature_list = handshake::Extension::new_signature_algorithm_list(signature_list)?;
+
+        let extensions = vec![curve_list, format_list, signature_list];
 
         let client_hello = Handshake::new_client_hello(random, cipher_suite, extensions)?;
         self.writer.write_handshake(&client_hello)?;
