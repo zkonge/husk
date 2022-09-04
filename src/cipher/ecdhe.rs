@@ -1,16 +1,14 @@
+use primit::rng::cprng::FastRng;
+use rand::rngs::OsRng;
 use std::io::Cursor;
-use rand::{RngCore, rngs::OsRng};
-
 
 use super::KeyExchange;
-use crate::crypto::p256;
-use crate::crypto::wrapping::Wrapping as W;
 use crate::handshake::NamedCurve;
 use crate::signature::DigitallySigned;
 use crate::tls_item::TlsItem;
+use crate::tls_result;
 use crate::tls_result::TlsErrorKind::IllegalParameter;
 use crate::tls_result::TlsResult;
-use crate::tls_result;
 use crate::util::{ReadExt, WriteExt};
 
 tls_vec!(EcData = u8(1, (1 << 8) - 1));
@@ -118,46 +116,31 @@ tls_struct!(
 pub struct EllipticDiffieHellman;
 
 impl KeyExchange for EllipticDiffieHellman {
-    fn compute_keys(&self, data: &[u8], rng: &mut OsRng) -> TlsResult<(Vec<u8>, Vec<u8>)> {
+    fn compute_keys(&self, data: &[u8], _: &mut OsRng) -> TlsResult<(Vec<u8>, Vec<u8>)> {
         let mut reader = Cursor::new(data);
         let ecdh_params: EcdheServerKeyExchange = TlsItem::tls_read(&mut reader)?;
 
-        let gy = &ecdh_params.params.public;
-        let gy = p256::NPoint256::from_uncompressed_bytes(gy);
-        let gy = match gy {
-            None => {
+        use primit::ec::p256::P256;
+        use primit::ec::ECDHE;
+
+        let mut rng = FastRng::new_from_system();
+        let sk = P256::new(&mut rng);
+
+        let peer_pk: &[u8] = &ecdh_params.params.public;
+        let gy = match sk.exchange(peer_pk.try_into().unwrap()) {
+            Ok(shared_secret) => shared_secret,
+            Err(_) => {
                 return tls_err!(IllegalParameter, "server sent strange public key");
             }
-            Some(gy) => gy,
         };
-        let gy = gy.to_point();
-
-        fn get_random_x(rng: &mut dyn RngCore) -> p256::int256::Int256 {
-            loop {
-                let mut x = p256::int256::ZERO;
-                for i in 0..8 {
-                    x.v[i] = W(rng.next_u32());
-                }
-                let xx = x.reduce_once(W(0));
-                let x_is_okay = xx.compare(&x);
-                if x_is_okay == W(0) {
-                    return x;
-                }
-            }
-        }
-
-        let x = get_random_x(rng);
-        let gx = p256::G.mult_scalar(&x).normalize().to_uncompressed_bytes();
-        let gxy = gy.mult_scalar(&x).normalize();
-        let pre_master_secret = gxy.x.to_bytes();
 
         // we don't support client cert. send public key explicitly.
-        let public = EcData::new(gx)?;
+        let public = EcData::new(sk.to_public().to_vec())?;
 
         let mut data = Vec::new();
         public.tls_write(&mut data)?;
         let public = data;
 
-        Ok((public, pre_master_secret))
+        Ok((public, gy.to_vec()))
     }
 }

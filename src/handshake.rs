@@ -32,6 +32,23 @@ tls_vec!(SessionId = u8(0, 32));
 
 tls_vec!(Asn1Cert = u8(1, (1 << 24) - 1));
 
+// RFC 6066
+//todo:add more type
+tls_enum!(u8, enum ServerNameIndicationType{
+    server_name(0)
+});
+
+tls_vec!(ServerName = u8(1, (1 << 16) - 1));
+
+tls_struct!(
+    struct ServerNameIndication {
+        server_name_type: ServerNameIndicationType,
+        server_name: ServerName,
+    }
+);
+
+tls_vec!(ServerNameIndicationList = ServerNameIndication(1, (1 << 16) - 1));
+
 // RFC 4492
 
 tls_enum!(u16, enum NamedCurve {
@@ -109,9 +126,10 @@ macro_rules! tls_hello_extension {
             fn tls_read<R: ReadExt>(reader: &mut R) -> TlsResult<$enum_name> {
                 let extension_type = try_read_num!(u16, reader);
                 let extension_data_size = try_read_num!(u16, reader);
-                match extension_type {
+                // TODO: warning ! received server sent 0 length sni vec (why?)
+                match (extension_type, extension_data_size) {
                     $(
-                        tt_to_pat!($ext_num) => {
+                        (tt_to_pat!($ext_num), size) if size > 0 => {
                             let body: $body_ty = TlsItem::tls_read(reader)?;
                             let body_size = body.tls_size();
                             if extension_data_size as u64 != body_size {
@@ -144,7 +162,7 @@ macro_rules! tls_hello_extension {
 tls_hello_extension!(
     enum Extension {
         // RFC 6066
-        //server_name(0),
+        server_name(ServerNameIndicationList) = 0,
         //max_fragment_length(1),
         //client_certificate_url(2),
         //trusted_ca_keys(3),
@@ -158,6 +176,18 @@ tls_hello_extension!(
 );
 
 impl Extension {
+    pub fn new_server_name_indication_list(list: Vec<Vec<u8>>) -> TlsResult<Extension> {
+        let list = ServerNameIndicationList::new(
+            list.into_iter()
+                .map(|n| ServerNameIndication {
+                    server_name_type: ServerNameIndicationType::server_name,
+                    server_name: ServerName::new(n).unwrap(),
+                })
+                .collect(),
+        )?;
+        let list = Extension::server_name(list);
+        Ok(list)
+    }
     pub fn new_elliptic_curve_list(list: Vec<NamedCurve>) -> TlsResult<Extension> {
         let list = EllipticCurveList::new(list)?;
         let list = Extension::elliptic_curves(list);

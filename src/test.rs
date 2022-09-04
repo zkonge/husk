@@ -17,6 +17,10 @@ impl Encryptor for NullEncryptor {
     fn encrypt(&mut self, _nonce: &[u8], plain: &[u8], _ad: &[u8]) -> Vec<u8> {
         plain.to_vec()
     }
+
+    fn fixed_iv_len(&self) -> usize {
+        0
+    }
 }
 
 impl Decryptor for NullDecryptor {
@@ -24,6 +28,9 @@ impl Decryptor for NullDecryptor {
         Ok(encrypted.to_vec())
     }
     fn mac_len(&self) -> usize {
+        0
+    }
+    fn fixed_iv_len(&self) -> usize {
         0
     }
 }

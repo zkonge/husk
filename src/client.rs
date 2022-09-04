@@ -20,15 +20,17 @@ pub struct TlsClient<R: Read, W: Write> {
     pub reader: TlsReader<R>,
     pub writer: TlsWriter<W>,
     pub rng: OsRng,
+    pub sni: String,
     buf: Vec<u8>,
 }
 
 impl<R: Read, W: Write> TlsClient<R, W> {
-    pub fn new(reader: R, writer: W, rng: OsRng) -> TlsResult<TlsClient<R, W>> {
+    pub fn new(reader: R, writer: W, rng: OsRng, sni: String) -> TlsResult<TlsClient<R, W>> {
         let mut client = TlsClient {
             reader: TlsReader::new(reader),
             writer: TlsWriter::new(writer),
             rng,
+            sni,
             buf: Vec::new(),
         };
 
@@ -70,7 +72,13 @@ impl<R: Read, W: Write> TlsClient<R, W> {
         let random = handshake::Random::new(cli_random.clone())?;
 
         // the only cipher we currently support
-        let cipher_suite = cipher::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
+        let cipher_suite = cipher::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+
+        let server_name_indication_list = vec![self.sni.as_bytes().to_vec()];
+        let server_name_indication_list =
+            handshake::Extension::new_server_name_indication_list(server_name_indication_list)?;
+        let mut data: Vec<u8> = Vec::new();
+        server_name_indication_list.tls_write(&mut data)?;
 
         let curve_list = vec![handshake::NamedCurve::secp256r1];
         let curve_list = handshake::Extension::new_elliptic_curve_list(curve_list)?;
@@ -85,7 +93,12 @@ impl<R: Read, W: Write> TlsClient<R, W> {
         let signature_list = vec![sh];
         let signature_list = handshake::Extension::new_signature_algorithm_list(signature_list)?;
 
-        let extensions = vec![curve_list, format_list, signature_list];
+        let extensions = vec![
+            server_name_indication_list,
+            curve_list,
+            format_list,
+            signature_list,
+        ];
 
         let client_hello = Handshake::new_client_hello(random, cipher_suite, extensions)?;
         self.writer.write_handshake(&client_hello)?;
@@ -167,8 +180,9 @@ impl<R: Read, W: Write> TlsClient<R, W> {
             // this will be set after receiving ChangeCipherSpec.
             let read_key = prf.get_bytes(enc_key_length);
 
-            let write_iv = prf.get_bytes(12);
-            let read_iv = prf.get_bytes(12);
+            // todo: fix me magic
+            let write_iv = prf.get_bytes(12 - aead.fixed_iv_len());
+            let read_iv = prf.get_bytes(12 - aead.fixed_iv_len());
 
             self.writer.set_iv(write_iv);
             self.reader.set_iv(read_iv);
@@ -272,7 +286,7 @@ impl<R: Read, W: Write> TlsClient<R, W> {
 }
 
 impl TlsClient<TcpStream, TcpStream> {
-    pub fn from_tcp(stream: TcpStream) -> TlsResult<TlsClient<TcpStream, TcpStream>> {
+    pub fn from_tcp(stream: TcpStream, sni: String) -> TlsResult<TlsClient<TcpStream, TcpStream>> {
         // let rng = match OsRng::new() {
         //     Ok(rng) => rng,
         //     Err(..) => return tls_err!(InternalError, "failed to create OsRng"),
@@ -281,7 +295,7 @@ impl TlsClient<TcpStream, TcpStream> {
 
         let reader = stream.try_clone()?;
         let writer = stream;
-        TlsClient::new(reader, writer, rng)
+        TlsClient::new(reader, writer, rng, sni)
     }
 }
 

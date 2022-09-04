@@ -1,4 +1,6 @@
 use num::traits::FromPrimitive;
+use rand::rngs::OsRng;
+use rand::RngCore;
 use std::io::prelude::*;
 
 use crate::cipher::{Decryptor, Encryptor};
@@ -125,17 +127,28 @@ impl<W: Write> TlsWriter<W> {
                 ad.push(record.content_type as u8);
                 ad.push(record.ver_major);
                 ad.push(record.ver_minor);
+
                 let frag_len = record.fragment.len() as u16;
                 ad.push((frag_len >> 8) as u8);
                 ad.push(frag_len as u8);
 
+                let mut result_buf = vec![];
                 if let Some(ref iv) = self.iv {
-                    u96_seq_num
-                        .iter_mut()
-                        .zip(iv.iter())
-                        .for_each(|(nonce, ivk)| *nonce ^= *ivk);
+                    if iv.len() == 4 {
+                        // aes-gcm
+                        u96_seq_num[..4].copy_from_slice(&iv);
+                        OsRng.fill_bytes(&mut u96_seq_num[4..]);
+                        result_buf.extend_from_slice(&u96_seq_num[4..]);
+                    } else if iv.len() == 12 {
+                        // chacha20-poly1305
+                        u96_seq_num
+                            .iter_mut()
+                            .zip(iv.iter())
+                            .for_each(|(nonce, ivk)| *nonce ^= *ivk);
+                    }
                 }
-                encryptor.encrypt(&u96_seq_num, &record.fragment, &ad)
+                result_buf.append(&mut encryptor.encrypt(&u96_seq_num, &record.fragment, &ad));
+                result_buf
             }
         };
 
@@ -291,23 +304,32 @@ impl<R: ReadExt> TlsReader<R> {
                 ad.push(minor);
 
                 let mac_len = decryptor.mac_len();
+                let explicit_iv_len = decryptor.fixed_iv_len();
                 let total_len = fragment.len();
-                if total_len < mac_len {
+                if total_len < mac_len + explicit_iv_len {
                     return tls_err!(BadRecordMac, "encrypted message too short: {}", total_len);
                 }
-                let frag_len = (total_len - mac_len) as u16;
+
+                let frag_len = (total_len - mac_len - explicit_iv_len) as u16;
                 ad.push((frag_len >> 8) as u8);
                 ad.push(frag_len as u8);
 
                 if let Some(ref iv) = self.iv {
-                    u96_seq_num
-                        .iter_mut()
-                        .zip(iv.iter())
-                        .for_each(|(nonce, ivk)| *nonce ^= *ivk);
+                    if iv.len() == 4 {
+                        // aes-gcm
+                        u96_seq_num[..4].copy_from_slice(&iv);
+                        u96_seq_num[4..].copy_from_slice(&fragment[..8]);
+                    } else if iv.len() == 12 {
+                        // chacha20-poly1305
+                        u96_seq_num
+                            .iter_mut()
+                            .zip(iv.iter())
+                            .for_each(|(nonce, ivk)| *nonce ^= *ivk);
+                    }
                 }
 
                 // TODO: "seq_num as nonce" is chacha20poly1305-specific
-                let data = decryptor.decrypt(&u96_seq_num, &fragment, &ad)?;
+                let data = decryptor.decrypt(&u96_seq_num, &fragment[explicit_iv_len..], &ad)?;
                 if data.len() > RECORD_MAX_LEN {
                     // decryption routine went wrong.
                     panic!("decrypted record too long: {}", data.len());
@@ -518,6 +540,9 @@ mod test {
         impl Encryptor for Enc {
             fn encrypt(&mut self, _nonce: &[u8], _fragment: &[u8], _ad: &[u8]) -> Vec<u8> {
                 vec![0; ENC_RECORD_MAX_LEN + 1]
+            }
+            fn fixed_iv_len(&self) -> usize {
+                0
             }
         }
 

@@ -1,5 +1,6 @@
 use rand::rngs::OsRng;
 
+use self::aes128gcm::AES128GCM;
 use self::chacha20_poly1305::ChaCha20Poly1305;
 use self::ecdhe::EllipticDiffieHellman;
 use crate::tls_item::TlsItem;
@@ -8,6 +9,7 @@ use crate::tls_result::TlsResult;
 use crate::util::{ReadExt, WriteExt};
 
 pub mod chacha20_poly1305;
+pub mod aes128gcm;
 pub mod ecdhe;
 pub mod prf;
 
@@ -21,12 +23,14 @@ pub trait Aead {
 
 pub trait Encryptor {
     fn encrypt(&mut self, nonce: &[u8], plain: &[u8], ad: &[u8]) -> Vec<u8>;
+    fn fixed_iv_len(&self) -> usize;
 }
 
 // Note: Enctryptor and Decryptor should be separated because there exists a state that
 // client encrypts data but server does not.
 pub trait Decryptor {
     fn decrypt(&mut self, nonce: &[u8], encrypted: &[u8], ad: &[u8]) -> TlsResult<Vec<u8>>;
+    fn fixed_iv_len(&self) -> usize;
     // FIXME: copied from Aead since record::RecordReader wants this
     fn mac_len(&self) -> usize;
 }
@@ -112,4 +116,6 @@ cipher_suite!(
     // EllipticDiffieHellman, ChaCha20Poly1305, MAC_SHA256, 0xcc, 0x13;
     // TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 =
     // EllipticDiffieHellman ChaCha20Poly1305 MAC_SHA256 0xcc 0x14;
+    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 = 
+    EllipticDiffieHellman, AES128GCM, MAC_SHA256, 0xc0, 0x2f;
 );
