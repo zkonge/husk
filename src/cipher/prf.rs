@@ -3,7 +3,7 @@
 
 // use primit::mac::hmac::hmac_sha256;
 use std::mem;
-use crate::crypto::sha2::sha256;
+use primit::hash::sha256::sha256;
 
 // key is SECRET, but the length is publicly known.
 pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {

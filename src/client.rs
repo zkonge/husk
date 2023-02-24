@@ -7,7 +7,7 @@ use std::net::TcpStream;
 use crate::alert;
 use crate::cipher;
 use crate::cipher::prf::Prf;
-use crate::crypto::sha2::sha256;
+use primit::hash::sha256::sha256;
 use crate::handshake::{self, Handshake};
 use crate::tls::{TlsReader, TlsWriter, TLS_VERSION};
 use crate::tls_item::{DummyItem, TlsItem};

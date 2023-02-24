@@ -9,8 +9,8 @@ num = "^0.4"
 enum_primitive = "^0.1"
 rand = { version = "^0.8", features = ["getrandom"] }
 primit = { path = "../primit" }
-# aes-gcm = "*"
 
 [profile.release]
 opt-level = "z"
 panic = "abort"
+strip = "symbols"

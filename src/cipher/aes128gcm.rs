@@ -25,10 +25,11 @@ impl Encryptor for AES128GCMEncryptor {
         let mut ret = data.to_vec();
 
         let alg = AESGCM::new(self.key.as_slice().try_into().unwrap());
-        let mut enc = alg.encryptor(nonce.try_into().unwrap(), ad);
+        let enc = alg.encryptor(nonce.try_into().unwrap(), ad);
 
-        enc.encrypt(&mut ret);
-        ret.extend_from_slice(&enc.finalize());
+        let mac = enc.finalize(&mut ret);
+        ret.extend_from_slice(&mac);
+
         ret
     }
     #[inline(always)]
@@ -56,10 +57,9 @@ impl Decryptor for AES128GCMDecryptor {
         let mut ret = encrypted.to_vec();
 
         let alg = AESGCM::new(self.key.as_slice().try_into().unwrap());
-        let mut dec = alg.decryptor(nonce.try_into().unwrap(), ad);
+        let dec = alg.decryptor(nonce.try_into().unwrap(), ad);
 
-        dec.decrypt(&mut ret);
-        match dec.finalize(mac_expected.try_into().unwrap()) {
+        match dec.finalize(&mut ret, mac_expected.try_into().unwrap()) {
             Ok(()) => Ok(ret),
             Err(_) => tls_err!(BadRecordMac, "wrong mac"),
         }

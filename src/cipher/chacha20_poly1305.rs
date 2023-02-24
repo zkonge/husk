@@ -25,10 +25,10 @@ impl Encryptor for ChaCha20Poly1305Encryptor {
         let mut ret = data.to_vec();
 
         let alg = Chacha20Poly1305::new(self.key.as_slice().try_into().unwrap());
-        let mut enc = alg.encryptor(nonce.try_into().unwrap(), ad);
+        let enc = alg.encryptor(nonce.try_into().unwrap(), ad);
 
-        enc.encrypt(&mut ret);
-        ret.extend_from_slice(&enc.finalize());
+        let mac=enc.finalize(&mut ret);
+        ret.extend_from_slice(&mac);
 
         ret
     }
@@ -57,10 +57,9 @@ impl Decryptor for ChaCha20Poly1305Decryptor {
         let mut ret = encrypted.to_vec();
 
         let alg = Chacha20Poly1305::new(self.key.as_slice().try_into().unwrap());
-        let mut dec = alg.decryptor(nonce.try_into().unwrap(), ad);
+        let dec = alg.decryptor(nonce.try_into().unwrap(), ad);
 
-        dec.decrypt(&mut ret);
-        match dec.finalize(mac_expected.try_into().unwrap()) {
+        match dec.finalize(&mut ret, mac_expected.try_into().unwrap()) {
             Ok(()) => Ok(ret),
             Err(_) => tls_err!(BadRecordMac, "wrong mac"),
         }
